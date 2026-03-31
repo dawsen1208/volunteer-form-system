@@ -7,6 +7,7 @@ on:
     paths:
       - server/**
       - .github/workflows/deploy-backend-appservice.yml
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -28,6 +29,12 @@ jobs:
           if [ -z "${{ vars.AZURE_WEBAPP_NAME }}" ]; then
             echo "Missing GitHub Actions variable: AZURE_WEBAPP_NAME"
             exit 1
+          fi
+          if [ -z "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ]; then
+            if [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] || [ -z "${{ secrets.AZURE_TENANT_ID }}" ] || [ -z "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ]; then
+              echo "Missing credentials: set AZURE_WEBAPP_PUBLISH_PROFILE, or set AZURE_CLIENT_ID/AZURE_TENANT_ID/AZURE_SUBSCRIPTION_ID for OIDC."
+              exit 1
+            fi
           fi
 
       - name: Install, Typecheck, Build (server)
