@@ -68,6 +68,7 @@ export function FormPage() {
   const myopiaHas = Form.useWatch(["body", "myopia", "has"], form);
   const advanceBatchOptions = Form.useWatch(["advanceBatchOptions"], form);
   const specialBatchOptions = Form.useWatch(["specialBatchOptions"], form);
+  const subjectsSelected = Form.useWatch(["scores", "subjectsSelected"], form);
 
   useEffect(() => {
     async function load() {
@@ -124,6 +125,20 @@ export function FormPage() {
       form.setFieldValue("specialBatchOtherNote", undefined);
     }
   }, [form, specialBatchOptions]);
+
+  useEffect(() => {
+    if (readOnly) return;
+    const fixed = ["数学", "语文", "英语"];
+    const optional = ["物理", "化学", "生物", "政治", "历史", "地理"];
+    const raw: string[] = Array.isArray(subjectsSelected) ? subjectsSelected : [];
+    const pickedOptional = raw.filter((s) => optional.includes(s)).slice(0, 3);
+    const next = [...fixed, ...pickedOptional];
+    const same =
+      raw.length === next.length && raw.every((v) => next.includes(v)) && next.every((v) => raw.includes(v));
+    if (!same) {
+      form.setFieldValue(["scores", "subjectsSelected"], next);
+    }
+  }, [form, readOnly, subjectsSelected]);
 
   function validatePhone(value: unknown, label: string) {
     const v = typeof value === "string" ? value.trim() : "";
@@ -188,11 +203,16 @@ export function FormPage() {
 
     if (targetStep === 3) {
       const selected = form.getFieldValue(["scores", "subjectsSelected"]);
-      const list: string[] = Array.isArray(selected) ? selected : [];
       const fixed = ["数学", "语文", "英语"];
-      const missingFixed = fixed.find((s) => !list.includes(s));
-      if (missingFixed) throw new Error("选科情况必须包含数学、语文、英语");
-      if (getOptionalSubjectCount(list) !== 3) {
+      const optional = ["物理", "化学", "生物", "政治", "历史", "地理"];
+      const raw: string[] = Array.isArray(selected) ? selected : [];
+      const normalized = [
+        ...fixed,
+        ...raw.filter((s) => optional.includes(s)).slice(0, 3)
+      ];
+      form.setFieldValue(["scores", "subjectsSelected"], normalized);
+
+      if (getOptionalSubjectCount(normalized) !== 3) {
         throw new Error("除数学、语文、英语外，请再选择三门科目");
       }
     }
