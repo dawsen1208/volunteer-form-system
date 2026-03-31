@@ -45,8 +45,17 @@ jobs:
           npm run build
           npm prune --omit=dev
 
+      - name: Detect Auth Method
+        id: auth
+        run: |
+          if [ -n "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ]; then
+            echo "method=publish_profile" >> "$GITHUB_OUTPUT"
+          else
+            echo "method=oidc" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy (Publish Profile / production)
-        if: vars.AZURE_WEBAPP_SLOT_NAME == '' && secrets.AZURE_WEBAPP_PUBLISH_PROFILE != ''
+        if: vars.AZURE_WEBAPP_SLOT_NAME == '' && steps.auth.outputs.method == 'publish_profile'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
@@ -54,7 +63,7 @@ jobs:
           package: ./server
 
       - name: Deploy (Publish Profile / slot)
-        if: vars.AZURE_WEBAPP_SLOT_NAME != '' && secrets.AZURE_WEBAPP_PUBLISH_PROFILE != ''
+        if: vars.AZURE_WEBAPP_SLOT_NAME != '' && steps.auth.outputs.method == 'publish_profile'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
@@ -63,7 +72,7 @@ jobs:
           package: ./server
 
       - name: Azure Login (OIDC)
-        if: secrets.AZURE_WEBAPP_PUBLISH_PROFILE == ''
+        if: steps.auth.outputs.method == 'oidc'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -71,14 +80,14 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy (OIDC / production)
-        if: vars.AZURE_WEBAPP_SLOT_NAME == '' && secrets.AZURE_WEBAPP_PUBLISH_PROFILE == ''
+        if: vars.AZURE_WEBAPP_SLOT_NAME == '' && steps.auth.outputs.method == 'oidc'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
           package: ./server
 
       - name: Deploy (OIDC / slot)
-        if: vars.AZURE_WEBAPP_SLOT_NAME != '' && secrets.AZURE_WEBAPP_PUBLISH_PROFILE == ''
+        if: vars.AZURE_WEBAPP_SLOT_NAME != '' && steps.auth.outputs.method == 'oidc'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
