@@ -1,0 +1,368 @@
+import type { FormContent, FormType } from "../types";
+import { juniorMajorCategories, provinces, undergradMajorCategories } from "./mapping";
+
+export type EditorKind =
+  | { type: "input"; placeholder?: string }
+  | { type: "textarea"; placeholder?: string; rows?: number }
+  | { type: "number"; placeholder?: string }
+  | { type: "radio"; options: { label: string; value: any }[] }
+  | { type: "select"; options: { label: string; value: any }[]; mode?: "multiple" }
+  | { type: "checkbox"; label: string }
+  | { type: "checkboxGroup"; options: string[] };
+
+export type FieldDef = {
+  name: (string | number)[];
+  label: string;
+  span?: 2;
+  required?: boolean;
+  requiredWhen?: { name: (string | number)[]; equals: any };
+  editor: EditorKind;
+  visibleWhen?: { name: (string | number)[]; equals: any };
+};
+
+export type SectionDef = {
+  key: string;
+  title: string;
+  description?: string;
+  step: 0 | 1;
+  fields: FieldDef[];
+};
+
+export function getMajorCategories(type: FormType) {
+  return type === "undergrad" ? undergradMajorCategories : juniorMajorCategories;
+}
+
+function optionStrings(values: string[]) {
+  return values.map((v) => ({ label: v, value: v }));
+}
+
+export const ORAL_EXAM_STATUS_VALUES = ["合格", "不合格", "未参加"] as const;
+export const TUITION_RANGE_VALUES = [
+  "无要求",
+  "1万以内",
+  "1-2万",
+  "2-3万",
+  "3-5万",
+  "5-10万",
+  "10万以上"
+] as const;
+export const HOUSEHOLD_TYPE_VALUES = ["城市户口", "农村户口", "高校专项", "农村地方专项"] as const;
+export const UPGRADE_INTENT_VALUES = ["升本", "不升本"] as const;
+
+const tuitionOptions = optionStrings([...TUITION_RANGE_VALUES]);
+const householdOptions = optionStrings([...HOUSEHOLD_TYPE_VALUES]);
+
+export function getFormSchema(type: FormType): SectionDef[] {
+  const baseStep1: SectionDef[] = [
+    {
+      key: "basic",
+      title: "基本信息",
+      step: 0,
+      fields: [
+        { name: ["fillTime"], label: "填表时间", editor: { type: "input", placeholder: "例如：2026-06-01" } },
+        { name: ["parentPhone"], label: "家长电话", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["fee"], label: "交费", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["remarksTop"], label: "顶部备注", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["name"], label: "姓名", required: true, editor: { type: "input", placeholder: "请输入" } },
+        {
+          name: ["gender"],
+          label: "性别",
+          editor: { type: "radio", options: [{ label: "男", value: "男" }, { label: "女", value: "女" }] }
+        },
+        { name: ["ethnicity"], label: "民族", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["birthDate"], label: "出生日期", editor: { type: "input", placeholder: "例如：2008-01-01" } },
+        { name: ["height"], label: "身高", editor: { type: "input", placeholder: "例如：170cm" } },
+        { name: ["weight"], label: "体重", editor: { type: "input", placeholder: "例如：60kg" } },
+        {
+          name: ["graduateStatus"],
+          label: "届别",
+          editor: { type: "radio", options: [{ label: "应届", value: "应届" }, { label: "往届", value: "往届" }] }
+        },
+        { name: ["candidatePhone"], label: "考生电话", required: true, editor: { type: "input", placeholder: "请输入" } },
+        { name: ["homeAddress"], label: "家庭住址", span: 2, editor: { type: "input", placeholder: "请输入" } },
+        { name: ["idNumber"], label: "身份证号", span: 2, editor: { type: "input", placeholder: "请输入" } },
+        { name: ["examNumber"], label: "考生号", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["referrer"], label: "推荐人", editor: { type: "input", placeholder: "请输入" } }
+      ]
+    },
+    {
+      key: "school",
+      title: "学业与学校信息",
+      step: 0,
+      fields: [
+        { name: ["candidateCategory"], label: "考生类别", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["professionalScore"], label: "专业成绩", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["advantageSubjects"], label: "优势学科", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["graduateSchool"], label: "毕业学校", required: true, editor: { type: "input", placeholder: "请输入" } },
+        { name: ["classTeacher"], label: "班级及班主任", editor: { type: "input", placeholder: "请输入" } },
+        {
+          name: ["physicalExamConclusion"],
+          label: "体检结论",
+          editor: { type: "input", placeholder: "请输入" },
+          requiredWhen: { name: ["physicalExamNormal"], equals: false }
+        },
+        {
+          name: ["physicalExamNormal"],
+          label: "体检是否正常",
+          editor: { type: "radio", options: [{ label: "正常", value: true }, { label: "不正常", value: false }] }
+        }
+      ]
+    },
+    {
+      key: "body",
+      title: "身体情况",
+      description: "可按实际情况勾选并补充说明",
+      step: 0,
+      fields: [
+        { name: ["body", "myopia", "has"], label: "近视", editor: { type: "checkbox", label: "有近视" } },
+        {
+          name: ["body", "myopia", "leftDegree"],
+          label: "左眼度数",
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["body", "myopia", "has"], equals: true },
+          requiredWhen: { name: ["body", "myopia", "has"], equals: true }
+        },
+        {
+          name: ["body", "myopia", "rightDegree"],
+          label: "右眼度数",
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["body", "myopia", "has"], equals: true },
+          requiredWhen: { name: ["body", "myopia", "has"], equals: true }
+        },
+        { name: ["body", "leftHanded"], label: "左利手", editor: { type: "checkbox", label: "左利手" } },
+        { name: ["body", "colorBlind"], label: "色盲", editor: { type: "checkbox", label: "色盲" } },
+        { name: ["body", "colorWeak"], label: "色弱", editor: { type: "checkbox", label: "色弱" } },
+        { name: ["body", "colorRecognitionIssue"], label: "色觉识别不全", editor: { type: "checkbox", label: "色觉识别不全" } },
+        { name: ["body", "hepatitisB"], label: "乙肝", editor: { type: "checkbox", label: "乙肝" } },
+        { name: ["body", "physicalDisability"], label: "肢体残疾", editor: { type: "checkbox", label: "肢体残疾" } },
+        {
+          name: ["body", "medicalHistoryNote"],
+          label: "病史/其他身体情况备注",
+          span: 2,
+          editor: { type: "textarea", rows: 3, placeholder: "请输入" }
+        }
+      ]
+    },
+    {
+      key: "scores",
+      title: "高考成绩",
+      step: 0,
+      fields: [
+        { name: ["scores", "totalScore"], label: "总分", editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "rank"], label: "位次", editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "chineseScore"], label: "语文", editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "mathScore"], label: "数学", editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "englishScore"], label: "英语", editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "physicsScore"], label: "物理", editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "chemistryScore"], label: "化学", editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "biologyScore"], label: "生物", editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "politicsScore"], label: "政治", editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "historyScore"], label: "历史", editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "geographyScore"], label: "地理", editor: { type: "number", placeholder: "请输入" } }
+      ]
+    },
+    {
+      key: "family",
+      title: "家庭与资源",
+      step: 0,
+      fields: [
+        { name: ["fatherOccupation"], label: "父亲职业", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["motherOccupation"], label: "母亲职业", editor: { type: "input", placeholder: "请输入" } },
+        {
+          name: ["socialResources"],
+          label: "社会资源（方便推荐学校和专业）",
+          span: 2,
+          editor: { type: "textarea", rows: 3, placeholder: "请输入" }
+        }
+      ]
+    }
+  ];
+
+  const undergradSpecial: SectionDef = {
+    key: "undergradSpecial",
+    title: "本科专属志愿条件",
+    step: 0,
+    fields: [
+      {
+        name: ["advanceBatchOptions"],
+        label: "提前批意向",
+        editor: {
+          type: "checkboxGroup",
+          options: [
+            "军队院校",
+            "公安政法类",
+            "免费师范生",
+            "免费医学生",
+            "免费农学生",
+            "小语种",
+            "飞行航海类",
+            "综合评价",
+            "港澳院校",
+            "直招士官",
+            "其他"
+          ]
+        }
+      },
+      {
+        name: ["advanceBatchOtherNote"],
+        label: "提前批其他备注",
+        editor: { type: "input", placeholder: "如选择其他请填写" },
+        visibleWhen: { name: ["advanceBatchOptions"], equals: "__hasOther" },
+        requiredWhen: { name: ["advanceBatchOptions"], equals: "__hasOther" }
+      },
+      {
+        name: ["specialBatchOptions"],
+        label: "特殊类型批",
+        editor: {
+          type: "checkboxGroup",
+          options: [
+            "高校专项",
+            "国家专项",
+            "地方专项",
+            "强基计划",
+            "综合评价",
+            "高水平运动队",
+            "小语种",
+            "涉农专业",
+            "其他"
+          ]
+        }
+      },
+      {
+        name: ["specialBatchOtherNote"],
+        label: "特殊类型其他备注",
+        editor: { type: "input", placeholder: "如选择其他请填写" },
+        visibleWhen: { name: ["specialBatchOptions"], equals: "__hasOther" },
+        requiredWhen: { name: ["specialBatchOptions"], equals: "__hasOther" }
+      },
+      {
+        name: ["targetMajorNotes"],
+        label: "意向专业类 / 目标专业选择说明",
+        span: 2,
+        editor: { type: "textarea", rows: 3, placeholder: "请输入" }
+      },
+      {
+        name: ["intendedProvinces"],
+        label: "意向省份（多选）",
+        editor: { type: "select", mode: "multiple", options: optionStrings([...provinces]) }
+      },
+      {
+        name: ["schoolLevelTags"],
+        label: "院校层级（多选）",
+        editor: { type: "checkboxGroup", options: ["985", "211", "双一流", "双一流学科"] }
+      },
+      {
+        name: ["schoolNatureTags"],
+        label: "院校属性（多选）",
+        editor: { type: "checkboxGroup", options: ["公办", "民办", "与港澳台合作办学", "中外合作办学"] }
+      },
+      {
+        name: ["oralExamStatus"],
+        label: "口语考试",
+        editor: { type: "select", options: optionStrings([...ORAL_EXAM_STATUS_VALUES]) }
+      },
+      { name: ["tuitionRange"], label: "学费区间", editor: { type: "select", options: tuitionOptions } },
+      { name: ["householdType"], label: "户籍类型", editor: { type: "select", options: householdOptions } },
+      {
+        name: ["publicFundIntent"],
+        label: "公费生意向",
+        editor: { type: "select", options: optionStrings(["有意向", "无意向"]) }
+      },
+      {
+        name: ["postgraduateIntent"],
+        label: "读研意向",
+        editor: { type: "select", options: optionStrings(["有意向", "无意向"]) }
+      },
+      {
+        name: ["employmentIntent"],
+        label: "就业意向",
+        editor: { type: "select", options: optionStrings(["有意向", "无意向"]) }
+      },
+      { name: ["extraPreferenceNotes"], label: "其他选项备注", span: 2, editor: { type: "input", placeholder: "请输入" } }
+    ]
+  };
+
+  const juniorSpecial: SectionDef = {
+    key: "juniorSpecial",
+    title: "专科专属志愿条件",
+    step: 0,
+    fields: [
+      { name: ["juniorPlanIntent"], label: "升学规划意向", editor: { type: "input", placeholder: "请输入" } },
+      { name: ["bachelorProvincePreference"], label: "本科目标省份偏好", editor: { type: "input", placeholder: "请输入" } },
+      { name: ["bachelorLevelPreference"], label: "本科层次偏好", editor: { type: "input", placeholder: "请输入" } },
+      { name: ["majorTypePreference"], label: "专业类型偏好", editor: { type: "input", placeholder: "请输入" } },
+      { name: ["costPreferenceRank"], label: "费用偏好排序/说明", editor: { type: "input", placeholder: "请输入" } },
+      { name: ["examSubjectPreference"], label: "考试科目偏好", editor: { type: "input", placeholder: "请输入" } },
+      { name: ["overseasOrInternationalPlan"], label: "出国留学/国际本科意向", editor: { type: "input", placeholder: "请输入" } },
+      {
+        name: ["intendedProvinces"],
+        label: "意向省份（多选）",
+        editor: { type: "select", mode: "multiple", options: optionStrings([...provinces]) }
+      },
+      {
+        name: ["schoolNatureTags"],
+        label: "院校属性（多选）",
+        editor: { type: "checkboxGroup", options: ["公办", "民办", "与港澳台合作办学", "中外合作办学"] }
+      },
+      {
+        name: ["oralExamStatus"],
+        label: "口语考试",
+        editor: { type: "select", options: optionStrings([...ORAL_EXAM_STATUS_VALUES]) }
+      },
+      {
+        name: ["upgradeIntent"],
+        label: "专升本意向",
+        editor: { type: "select", options: optionStrings([...UPGRADE_INTENT_VALUES]) }
+      },
+      { name: ["tuitionRange"], label: "学费区间", editor: { type: "select", options: tuitionOptions } },
+      { name: ["householdType"], label: "户籍类型", editor: { type: "select", options: householdOptions } },
+      {
+        name: ["publicFundMajorIntent"],
+        label: "公费型专业意向",
+        editor: { type: "select", options: optionStrings(["有意向", "无意向"]) }
+      },
+      { name: ["extraPreferenceNotes"], label: "其他备注", span: 2, editor: { type: "input", placeholder: "请输入" } }
+    ]
+  };
+
+  const step2: SectionDef[] = [
+    {
+      key: "step2Text",
+      title: "梦想院校/备注",
+      step: 1,
+      fields: [
+        { name: ["dreamUniversityOrCity"], label: "梦中大学或城市", span: 2, editor: { type: "textarea", rows: 4, placeholder: "请输入" } },
+        { name: ["finalRemarks"], label: "备注", span: 2, editor: { type: "textarea", rows: 4, placeholder: "请输入" } }
+      ]
+    }
+  ];
+
+  return [...baseStep1, type === "undergrad" ? undergradSpecial : juniorSpecial, ...step2];
+}
+
+export function getValueAtPath(content: FormContent | undefined, path: (string | number)[]): unknown {
+  let cur: any = content ?? {};
+  for (const key of path) {
+    if (cur == null) return undefined;
+    cur = cur[key as any];
+  }
+  return cur;
+}
+
+export function normalizeVisible(visibleWhen: FieldDef["visibleWhen"], content: any): boolean {
+  if (!visibleWhen) return true;
+  const value = getValueAtPath(content, visibleWhen.name);
+  if (visibleWhen.equals === "__hasOther") {
+    return Array.isArray(value) && value.includes("其他");
+  }
+  return value === visibleWhen.equals;
+}
+
+export function normalizeRequired(requiredWhen: FieldDef["requiredWhen"], content: any): boolean {
+  if (!requiredWhen) return false;
+  const value = getValueAtPath(content, requiredWhen.name);
+  if (requiredWhen.equals === "__hasOther") {
+    return Array.isArray(value) && value.includes("其他");
+  }
+  return value === requiredWhen.equals;
+}
