@@ -274,7 +274,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
     },
     {
       key: "family",
-      title: "家庭与资源",
+      title: "家庭情况",
       step: 2,
       fields: [
         { name: ["fatherOccupation"], label: "父亲职业", editor: { type: "input", placeholder: "请输入" } },

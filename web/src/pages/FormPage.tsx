@@ -322,7 +322,7 @@ export function FormPage() {
             items={[
               { title: "基础信息" },
               { title: "身体情况" },
-              { title: "家庭与资源" },
+              { title: "家庭情况" },
               { title: "高考成绩" },
               { title: "志愿条件" },
               { title: "备注" }
