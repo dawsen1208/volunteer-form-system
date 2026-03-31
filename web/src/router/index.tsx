@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { HashRouter, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AdminLoginPage } from "../pages/AdminLoginPage";
@@ -13,7 +13,7 @@ import { RecordsPage } from "../pages/RecordsPage";
 
 export function AppRouter() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/admin-login" element={<AdminLoginPage />} />
@@ -35,6 +35,6 @@ export function AppRouter() {
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

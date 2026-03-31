@@ -3,9 +3,22 @@ import axios, { AxiosError } from "axios";
 import type { ApiResponse } from "../types";
 import { getToken } from "../utils/storage";
 
-const rawBaseURL = import.meta.env.VITE_API_BASE_URL as string | undefined;
+declare global {
+  interface Window {
+    __APP_CONFIG__?: {
+      apiBaseUrl?: string;
+    };
+  }
+}
+
+const runtimeBaseURL =
+  typeof window !== "undefined" ? (window.__APP_CONFIG__?.apiBaseUrl as string | undefined) : undefined;
+
+const rawBaseURL = (runtimeBaseURL ?? (import.meta.env.VITE_API_BASE_URL as string | undefined)) as
+  | string
+  | undefined;
 const baseURL = rawBaseURL && rawBaseURL.trim() ? rawBaseURL.trim() : undefined;
-const fallbackBaseURL = import.meta.env.DEV ? "http://localhost:3001/api" : "/api";
+const fallbackBaseURL = import.meta.env.DEV ? "http://localhost:3001/api" : undefined;
 
 export const apiClient = axios.create({
   baseURL: baseURL ?? fallbackBaseURL,
@@ -13,6 +26,9 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
+  if (!import.meta.env.DEV && !baseURL) {
+    return Promise.reject(new Error("未配置 API 地址：请设置 VITE_API_BASE_URL 或 window.__APP_CONFIG__.apiBaseUrl"));
+  }
   const token = getToken();
   if (token) {
     config.headers = config.headers ?? {};
