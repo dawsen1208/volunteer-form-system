@@ -40,6 +40,30 @@ jobs:
           SLOT_NAME="${{ vars.AZURE_WEBAPP_SLOT_NAME }}"
           echo "slot_name=$SLOT_NAME" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve Credentials
+        id: cred
+        run: |
+          HAS_PUBLISH_PROFILE=0
+          if [ -n "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ]; then
+            HAS_PUBLISH_PROFILE=1
+          fi
+
+          HAS_OIDC=0
+          if [ -n "${{ secrets.AZURE_CLIENT_ID }}" ] && [ -n "${{ secrets.AZURE_TENANT_ID }}" ] && [ -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ]; then
+            HAS_OIDC=1
+          fi
+
+          if [ "$HAS_PUBLISH_PROFILE" -eq 0 ] && [ "$HAS_OIDC" -eq 0 ]; then
+            echo "Missing credentials: set Secret AZURE_WEBAPP_PUBLISH_PROFILE (recommended), or set Secrets AZURE_CLIENT_ID/AZURE_TENANT_ID/AZURE_SUBSCRIPTION_ID for OIDC."
+            exit 1
+          fi
+
+          if [ "$HAS_PUBLISH_PROFILE" -eq 1 ]; then
+            echo "method=publish_profile" >> "$GITHUB_OUTPUT"
+          else
+            echo "method=oidc" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install, Typecheck, Build (server)
         working-directory: server
         run: |
@@ -48,17 +72,8 @@ jobs:
           npm run build
           npm prune --omit=dev
 
-      - name: Detect Auth Method
-        id: auth
-        run: |
-          if [ -n "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ]; then
-            echo "method=publish_profile" >> "$GITHUB_OUTPUT"
-          else
-            echo "method=oidc" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Deploy (Publish Profile / production)
-        if: steps.cfg.outputs.slot_name == '' && steps.auth.outputs.method == 'publish_profile'
+        if: steps.cfg.outputs.slot_name == '' && steps.cred.outputs.method == 'publish_profile'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ steps.cfg.outputs.app_name }}
@@ -66,7 +81,7 @@ jobs:
           package: ./server
 
       - name: Deploy (Publish Profile / slot)
-        if: steps.cfg.outputs.slot_name != '' && steps.auth.outputs.method == 'publish_profile'
+        if: steps.cfg.outputs.slot_name != '' && steps.cred.outputs.method == 'publish_profile'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ steps.cfg.outputs.app_name }}
@@ -75,7 +90,7 @@ jobs:
           package: ./server
 
       - name: Azure Login (OIDC)
-        if: steps.auth.outputs.method == 'oidc'
+        if: steps.cred.outputs.method == 'oidc'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -83,14 +98,14 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy (OIDC / production)
-        if: steps.cfg.outputs.slot_name == '' && steps.auth.outputs.method == 'oidc'
+        if: steps.cfg.outputs.slot_name == '' && steps.cred.outputs.method == 'oidc'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ steps.cfg.outputs.app_name }}
           package: ./server
 
       - name: Deploy (OIDC / slot)
-        if: steps.cfg.outputs.slot_name != '' && steps.auth.outputs.method == 'oidc'
+        if: steps.cfg.outputs.slot_name != '' && steps.cred.outputs.method == 'oidc'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ steps.cfg.outputs.app_name }}
