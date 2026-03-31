@@ -1,6 +1,7 @@
 import axios, { AxiosError } from "axios";
 
 import type { ApiResponse } from "../types";
+import { clearAuth } from "../store/auth";
 import { getToken } from "../utils/storage";
 
 declare global {
@@ -50,6 +51,14 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error: AxiosError) => {
+    const status = error.response?.status;
+    if (status === 401) {
+      clearAuth();
+      if (typeof window !== "undefined") {
+        window.location.hash = "#/login";
+      }
+      return Promise.reject(new Error("登录已过期，请重新登录"));
+    }
     const payload = error.response?.data as any;
     if (payload && typeof payload === "object" && typeof payload.message === "string") {
       return Promise.reject(new Error(payload.message));
