@@ -51,60 +51,40 @@ function getMajorPreferences(content: FormContent | undefined): MajorPreferenceI
   return [];
 }
 
-function splitByStep(schema: SectionDef[], step: 0 | 1) {
+function splitByStep(schema: SectionDef[], step: number) {
   return schema.filter((s) => s.step === step);
 }
 
-export function FormContentView(props: { type: FormType; content: FormContent; step?: 0 | 1 }) {
+export function FormContentView(props: { type: FormType; content: FormContent; step?: number }) {
   const schema = getFormSchema(props.type);
   const sections = props.step === undefined ? schema : splitByStep(schema, props.step);
   const majors = getMajorPreferences(props.content);
 
   return (
     <div className="space-y-4">
-      {sections.map((section) => {
-        if (section.key === "step2Text") {
-          return (
-            <div key={section.key} className="space-y-4">
-              <FormSectionCard title="专业意向表格">
-                <div className="space-y-2">
-                  {majors.length ? (
-                    majors.map((m, idx) => (
-                      <div
-                        key={idx}
-                        className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm"
-                      >
-                        <span className="text-slate-500">{idx + 1}.</span>
-                        <span className="text-slate-900">{m.majorCategory || "-"}</span>
-                        <span className="text-slate-500">/</span>
-                        <span className="text-slate-900">{m.majorName || "-"}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-sm text-slate-600">未填写</div>
-                  )}
+      {props.step === undefined || props.step === 2 ? (
+        <FormSectionCard title="专业意向表格">
+          <div className="space-y-2">
+            {majors.length ? (
+              majors.map((m, idx) => (
+                <div
+                  key={idx}
+                  className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                >
+                  <span className="text-slate-500">{idx + 1}.</span>
+                  <span className="text-slate-900">{m.majorCategory || "-"}</span>
+                  <span className="text-slate-500">/</span>
+                  <span className="text-slate-900">{m.majorName || "-"}</span>
                 </div>
-              </FormSectionCard>
+              ))
+            ) : (
+              <div className="text-sm text-slate-600">未填写</div>
+            )}
+          </div>
+        </FormSectionCard>
+      ) : null}
 
-              <FormSectionCard title={section.title} description={section.description}>
-                <Descriptions size="small" column={2}>
-                  {section.fields
-                    .filter((f) => normalizeVisible(f.visibleWhen, props.content))
-                    .map((f) => (
-                      <Descriptions.Item
-                        key={f.name.join(".")}
-                        label={f.label}
-                        span={f.span === 2 ? 2 : 1}
-                      >
-                        {toText(f, getValueAtPath(props.content, f.name))}
-                      </Descriptions.Item>
-                    ))}
-                </Descriptions>
-              </FormSectionCard>
-            </div>
-          );
-        }
-
+      {sections.map((section) => {
         return (
           <FormSectionCard key={section.key} title={section.title} description={section.description}>
             <Descriptions size="small" column={2}>

@@ -14,10 +14,8 @@ function createDefaultMajorPreferences(): MajorPreferenceItem[] {
 
 export function createDefaultUndergradContent(): UndergradFormContent {
   return {
-    fillTime: "",
+    fillTime: new Date().toISOString(),
     parentPhone: "",
-    fee: "",
-    remarksTop: "",
     name: "",
     gender: "",
     ethnicity: "",
@@ -32,8 +30,9 @@ export function createDefaultUndergradContent(): UndergradFormContent {
     referrer: "",
     candidateCategory: "",
     professionalScore: "",
-    advantageSubjects: "",
+    advantageSubjects: [],
     graduateSchool: "",
+    className: "",
     classTeacher: "",
     physicalExamConclusion: "",
     physicalExamNormal: undefined,
@@ -50,6 +49,7 @@ export function createDefaultUndergradContent(): UndergradFormContent {
     scores: {
       totalScore: undefined,
       rank: undefined,
+      subjectsSelected: ["数学", "语文", "英语"],
       chineseScore: undefined,
       mathScore: undefined,
       englishScore: undefined,
@@ -86,10 +86,8 @@ export function createDefaultUndergradContent(): UndergradFormContent {
 
 export function createDefaultJuniorContent(): JuniorFormContent {
   return {
-    fillTime: "",
+    fillTime: new Date().toISOString(),
     parentPhone: "",
-    fee: "",
-    remarksTop: "",
     name: "",
     gender: "",
     ethnicity: "",
@@ -104,8 +102,9 @@ export function createDefaultJuniorContent(): JuniorFormContent {
     referrer: "",
     candidateCategory: "",
     professionalScore: "",
-    advantageSubjects: "",
+    advantageSubjects: [],
     graduateSchool: "",
+    className: "",
     classTeacher: "",
     physicalExamConclusion: "",
     physicalExamNormal: undefined,
@@ -122,6 +121,7 @@ export function createDefaultJuniorContent(): JuniorFormContent {
     scores: {
       totalScore: undefined,
       rank: undefined,
+      subjectsSelected: ["数学", "语文", "英语"],
       chineseScore: undefined,
       mathScore: undefined,
       englishScore: undefined,
@@ -183,6 +183,19 @@ export function mergeDefaultContent(type: "undergrad" | "junior", existing: any)
   const defaults = type === "undergrad" ? createDefaultUndergradContent() : createDefaultJuniorContent();
   const merged = deepMergeDefaults(defaults as any, existing) as any;
 
+  if (typeof merged.fillTime !== "string" || !merged.fillTime.trim()) {
+    merged.fillTime = new Date().toISOString();
+  }
+
+  if (!Array.isArray(merged.advantageSubjects)) {
+    merged.advantageSubjects = [];
+  }
+
+  if (!Array.isArray(merged.scores?.subjectsSelected)) {
+    merged.scores = merged.scores ?? {};
+    merged.scores.subjectsSelected = ["数学", "语文", "英语"];
+  }
+
   const rows: MajorPreferenceItem[] = Array.isArray(merged.majorPreferences)
     ? merged.majorPreferences
     : createDefaultMajorPreferences();
@@ -200,4 +213,3 @@ export function mergeDefaultContent(type: "undergrad" | "junior", existing: any)
 
   return merged;
 }
-

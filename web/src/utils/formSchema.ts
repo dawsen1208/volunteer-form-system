@@ -5,26 +5,40 @@ export type EditorKind =
   | { type: "input"; placeholder?: string }
   | { type: "textarea"; placeholder?: string; rows?: number }
   | { type: "number"; placeholder?: string }
+  | { type: "date"; placeholder?: string }
   | { type: "radio"; options: { label: string; value: any }[] }
   | { type: "select"; options: { label: string; value: any }[]; mode?: "multiple" }
   | { type: "checkbox"; label: string }
-  | { type: "checkboxGroup"; options: string[] };
+  | { type: "checkboxGroup"; options: string[] | ((content: any) => string[]) }
+  | {
+      type: "subjectSelection";
+      fixed: string[];
+      optional: string[];
+      maxOptional: number;
+    };
+
+export type Condition = {
+  name: (string | number)[];
+  equals?: any;
+  in?: any[];
+  includes?: any;
+};
 
 export type FieldDef = {
   name: (string | number)[];
   label: string;
   span?: 2;
   required?: boolean;
-  requiredWhen?: { name: (string | number)[]; equals: any };
+  requiredWhen?: Condition;
   editor: EditorKind;
-  visibleWhen?: { name: (string | number)[]; equals: any };
+  visibleWhen?: Condition;
 };
 
 export type SectionDef = {
   key: string;
   title: string;
   description?: string;
-  step: 0 | 1;
+  step: number;
   fields: FieldDef[];
 };
 
@@ -53,16 +67,13 @@ const tuitionOptions = optionStrings([...TUITION_RANGE_VALUES]);
 const householdOptions = optionStrings([...HOUSEHOLD_TYPE_VALUES]);
 
 export function getFormSchema(type: FormType): SectionDef[] {
-  const baseStep1: SectionDef[] = [
+  const base: SectionDef[] = [
     {
       key: "basic",
       title: "基本信息",
       step: 0,
       fields: [
-        { name: ["fillTime"], label: "填表时间", editor: { type: "input", placeholder: "例如：2026-06-01" } },
         { name: ["parentPhone"], label: "家长电话", editor: { type: "input", placeholder: "请输入" } },
-        { name: ["fee"], label: "交费", editor: { type: "input", placeholder: "请输入" } },
-        { name: ["remarksTop"], label: "顶部备注", editor: { type: "input", placeholder: "请输入" } },
         { name: ["name"], label: "姓名", required: true, editor: { type: "input", placeholder: "请输入" } },
         {
           name: ["gender"],
@@ -70,19 +81,20 @@ export function getFormSchema(type: FormType): SectionDef[] {
           editor: { type: "radio", options: [{ label: "男", value: "男" }, { label: "女", value: "女" }] }
         },
         { name: ["ethnicity"], label: "民族", editor: { type: "input", placeholder: "请输入" } },
-        { name: ["birthDate"], label: "出生日期", editor: { type: "input", placeholder: "例如：2008-01-01" } },
+        { name: ["birthDate"], label: "出生日期", editor: { type: "date", placeholder: "请选择" } },
         { name: ["height"], label: "身高", editor: { type: "input", placeholder: "例如：170cm" } },
         { name: ["weight"], label: "体重", editor: { type: "input", placeholder: "例如：60kg" } },
         {
           name: ["graduateStatus"],
           label: "届别",
+          required: true,
           editor: { type: "radio", options: [{ label: "应届", value: "应届" }, { label: "往届", value: "往届" }] }
         },
         { name: ["candidatePhone"], label: "考生电话", required: true, editor: { type: "input", placeholder: "请输入" } },
         { name: ["homeAddress"], label: "家庭住址", span: 2, editor: { type: "input", placeholder: "请输入" } },
-        { name: ["idNumber"], label: "身份证号", span: 2, editor: { type: "input", placeholder: "请输入" } },
-        { name: ["examNumber"], label: "考生号", editor: { type: "input", placeholder: "请输入" } },
-        { name: ["referrer"], label: "推荐人", editor: { type: "input", placeholder: "请输入" } }
+        { name: ["idNumber"], label: "身份证号", required: true, span: 2, editor: { type: "input", placeholder: "请输入" } },
+        { name: ["examNumber"], label: "考生号", required: true, editor: { type: "input", placeholder: "请输入" } },
+        { name: ["referrer"], label: "推荐人", editor: { type: "input", placeholder: "请输入，若无推荐人请填无" } }
       ]
     },
     {
@@ -90,11 +102,44 @@ export function getFormSchema(type: FormType): SectionDef[] {
       title: "学业与学校信息",
       step: 0,
       fields: [
-        { name: ["candidateCategory"], label: "考生类别", editor: { type: "input", placeholder: "请输入" } },
-        { name: ["professionalScore"], label: "专业成绩", editor: { type: "input", placeholder: "请输入" } },
-        { name: ["advantageSubjects"], label: "优势学科", editor: { type: "input", placeholder: "请输入" } },
+        {
+          name: ["candidateCategory"],
+          label: "考试类别",
+          required: true,
+          editor: {
+            type: "radio",
+            options: [
+              { label: "普通", value: "普通" },
+              { label: "艺术", value: "艺术" },
+              { label: "体育", value: "体育" }
+            ]
+          }
+        },
+        {
+          name: ["professionalScore"],
+          label: "专业成绩",
+          editor: { type: "input", placeholder: "请输入" },
+          visibleWhen: { name: ["candidateCategory"], in: ["艺术", "体育"] },
+          requiredWhen: { name: ["candidateCategory"], in: ["艺术", "体育"] }
+        },
+        {
+          name: ["advantageSubjects"],
+          label: "优势学科",
+          required: true,
+          editor: {
+            type: "checkboxGroup",
+            options: (content) => {
+              const base = ["数学", "语文", "英语", "物理", "化学", "生物", "政治", "历史", "地理"];
+              const exam = (content as any)?.candidateCategory;
+              if (exam === "艺术") return [...base, "艺术"];
+              if (exam === "体育") return [...base, "体育"];
+              return base;
+            }
+          }
+        },
         { name: ["graduateSchool"], label: "毕业学校", required: true, editor: { type: "input", placeholder: "请输入" } },
-        { name: ["classTeacher"], label: "班级及班主任", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["className"], label: "班级", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["classTeacher"], label: "班主任", editor: { type: "input", placeholder: "请输入" } },
         {
           name: ["physicalExamConclusion"],
           label: "体检结论",
@@ -104,6 +149,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
         {
           name: ["physicalExamNormal"],
           label: "体检是否正常",
+          required: true,
           editor: { type: "radio", options: [{ label: "正常", value: true }, { label: "不正常", value: false }] }
         }
       ]
@@ -112,7 +158,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
       key: "body",
       title: "身体情况",
       description: "可按实际情况勾选并补充说明",
-      step: 0,
+      step: 1,
       fields: [
         { name: ["body", "myopia", "has"], label: "近视", editor: { type: "checkbox", label: "有近视" } },
         {
@@ -146,25 +192,90 @@ export function getFormSchema(type: FormType): SectionDef[] {
     {
       key: "scores",
       title: "高考成绩",
-      step: 0,
+      step: 1,
       fields: [
-        { name: ["scores", "totalScore"], label: "总分", editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "rank"], label: "位次", editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "chineseScore"], label: "语文", editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "mathScore"], label: "数学", editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "englishScore"], label: "英语", editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "physicsScore"], label: "物理", editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "chemistryScore"], label: "化学", editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "biologyScore"], label: "生物", editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "politicsScore"], label: "政治", editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "historyScore"], label: "历史", editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "geographyScore"], label: "地理", editor: { type: "number", placeholder: "请输入" } }
+        { name: ["scores", "totalScore"], label: "总分", required: true, editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "rank"], label: "位次", required: true, editor: { type: "number", placeholder: "请输入" } },
+        {
+          name: ["scores", "subjectsSelected"],
+          label: "选科情况",
+          required: true,
+          editor: {
+            type: "subjectSelection",
+            fixed: ["数学", "语文", "英语"],
+            optional: ["物理", "化学", "生物", "政治", "历史", "地理"],
+            maxOptional: 3
+          }
+        },
+        {
+          name: ["scores", "chineseScore"],
+          label: "语文",
+          required: true,
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["scores", "subjectsSelected"], includes: "语文" }
+        },
+        {
+          name: ["scores", "mathScore"],
+          label: "数学",
+          required: true,
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["scores", "subjectsSelected"], includes: "数学" }
+        },
+        {
+          name: ["scores", "englishScore"],
+          label: "英语",
+          required: true,
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["scores", "subjectsSelected"], includes: "英语" }
+        },
+        {
+          name: ["scores", "physicsScore"],
+          label: "物理",
+          required: true,
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["scores", "subjectsSelected"], includes: "物理" }
+        },
+        {
+          name: ["scores", "chemistryScore"],
+          label: "化学",
+          required: true,
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["scores", "subjectsSelected"], includes: "化学" }
+        },
+        {
+          name: ["scores", "biologyScore"],
+          label: "生物",
+          required: true,
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["scores", "subjectsSelected"], includes: "生物" }
+        },
+        {
+          name: ["scores", "politicsScore"],
+          label: "政治",
+          required: true,
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["scores", "subjectsSelected"], includes: "政治" }
+        },
+        {
+          name: ["scores", "historyScore"],
+          label: "历史",
+          required: true,
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["scores", "subjectsSelected"], includes: "历史" }
+        },
+        {
+          name: ["scores", "geographyScore"],
+          label: "地理",
+          required: true,
+          editor: { type: "number", placeholder: "请输入" },
+          visibleWhen: { name: ["scores", "subjectsSelected"], includes: "地理" }
+        }
       ]
     },
     {
       key: "family",
       title: "家庭与资源",
-      step: 0,
+      step: 1,
       fields: [
         { name: ["fatherOccupation"], label: "父亲职业", editor: { type: "input", placeholder: "请输入" } },
         { name: ["motherOccupation"], label: "母亲职业", editor: { type: "input", placeholder: "请输入" } },
@@ -181,7 +292,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
   const undergradSpecial: SectionDef = {
     key: "undergradSpecial",
     title: "本科专属志愿条件",
-    step: 0,
+    step: 2,
     fields: [
       {
         name: ["advanceBatchOptions"],
@@ -244,6 +355,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
       {
         name: ["intendedProvinces"],
         label: "意向省份（多选）",
+        required: true,
         editor: { type: "select", mode: "multiple", options: optionStrings([...provinces]) }
       },
       {
@@ -285,7 +397,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
   const juniorSpecial: SectionDef = {
     key: "juniorSpecial",
     title: "专科专属志愿条件",
-    step: 0,
+    step: 2,
     fields: [
       { name: ["juniorPlanIntent"], label: "升学规划意向", editor: { type: "input", placeholder: "请输入" } },
       { name: ["bachelorProvincePreference"], label: "本科目标省份偏好", editor: { type: "input", placeholder: "请输入" } },
@@ -297,6 +409,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
       {
         name: ["intendedProvinces"],
         label: "意向省份（多选）",
+        required: true,
         editor: { type: "select", mode: "multiple", options: optionStrings([...provinces]) }
       },
       {
@@ -325,11 +438,11 @@ export function getFormSchema(type: FormType): SectionDef[] {
     ]
   };
 
-  const step2: SectionDef[] = [
+  const step3: SectionDef[] = [
     {
       key: "step2Text",
       title: "梦想院校/备注",
-      step: 1,
+      step: 3,
       fields: [
         { name: ["dreamUniversityOrCity"], label: "梦中大学或城市", span: 2, editor: { type: "textarea", rows: 4, placeholder: "请输入" } },
         { name: ["finalRemarks"], label: "备注", span: 2, editor: { type: "textarea", rows: 4, placeholder: "请输入" } }
@@ -337,7 +450,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
     }
   ];
 
-  return [...baseStep1, type === "undergrad" ? undergradSpecial : juniorSpecial, ...step2];
+  return [...base, type === "undergrad" ? undergradSpecial : juniorSpecial, ...step3];
 }
 
 export function getValueAtPath(content: FormContent | undefined, path: (string | number)[]): unknown {
@@ -352,17 +465,19 @@ export function getValueAtPath(content: FormContent | undefined, path: (string |
 export function normalizeVisible(visibleWhen: FieldDef["visibleWhen"], content: any): boolean {
   if (!visibleWhen) return true;
   const value = getValueAtPath(content, visibleWhen.name);
-  if (visibleWhen.equals === "__hasOther") {
-    return Array.isArray(value) && value.includes("其他");
-  }
-  return value === visibleWhen.equals;
+  if (visibleWhen.equals === "__hasOther") return Array.isArray(value) && value.includes("其他");
+  if (Array.isArray(visibleWhen.in)) return visibleWhen.in.includes(value);
+  if (visibleWhen.includes !== undefined) return Array.isArray(value) && value.includes(visibleWhen.includes);
+  if ("equals" in visibleWhen) return value === visibleWhen.equals;
+  return Boolean(value);
 }
 
 export function normalizeRequired(requiredWhen: FieldDef["requiredWhen"], content: any): boolean {
   if (!requiredWhen) return false;
   const value = getValueAtPath(content, requiredWhen.name);
-  if (requiredWhen.equals === "__hasOther") {
-    return Array.isArray(value) && value.includes("其他");
-  }
-  return value === requiredWhen.equals;
+  if (requiredWhen.equals === "__hasOther") return Array.isArray(value) && value.includes("其他");
+  if (Array.isArray(requiredWhen.in)) return requiredWhen.in.includes(value);
+  if (requiredWhen.includes !== undefined) return Array.isArray(value) && value.includes(requiredWhen.includes);
+  if ("equals" in requiredWhen) return value === requiredWhen.equals;
+  return Boolean(value);
 }

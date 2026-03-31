@@ -43,6 +43,7 @@ export type BodyCondition = {
 export type ExamScores = {
   totalScore?: number;
   rank?: number;
+  subjectsSelected?: string[];
   chineseScore?: number;
   mathScore?: number;
   englishScore?: number;
@@ -57,8 +58,6 @@ export type ExamScores = {
 export type BaseFormContent = {
   fillTime?: string;
   parentPhone?: string;
-  fee?: string;
-  remarksTop?: string;
   name?: string;
   gender?: string;
   ethnicity?: string;
@@ -73,8 +72,9 @@ export type BaseFormContent = {
   referrer?: string;
   candidateCategory?: string;
   professionalScore?: string;
-  advantageSubjects?: string;
+  advantageSubjects?: string[];
   graduateSchool?: string;
+  className?: string;
   classTeacher?: string;
   physicalExamConclusion?: string;
   physicalExamNormal?: boolean;

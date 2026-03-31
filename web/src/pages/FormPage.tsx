@@ -147,7 +147,7 @@ export function FormPage() {
     if (!allowed.includes(value)) throw new Error(`${label}取值不合法`);
   }
 
-  function getStepRequiredFieldNames(targetStep: 0 | 1): (string | number)[][] {
+  function getStepRequiredFieldNames(targetStep: number): (string | number)[][] {
     const sections = schema.filter((s) => s.step === targetStep);
     const fields = sections.flatMap((s) => s.fields);
     return fields
@@ -156,7 +156,12 @@ export function FormPage() {
       .map((f) => f.name);
   }
 
-  async function validateStep(targetStep: 0 | 1) {
+  function getOptionalSubjectCount(selected: string[]) {
+    const fixed = new Set(["数学", "语文", "英语"]);
+    return selected.filter((s) => !fixed.has(s)).length;
+  }
+
+  async function validateStep(targetStep: number) {
     const names = getStepRequiredFieldNames(targetStep);
     if (names.length) {
       await form.validateFields(names as any);
@@ -166,7 +171,6 @@ export function FormPage() {
       const name = String(form.getFieldValue("name") ?? "").trim();
       if (!name) throw new Error("请输入姓名");
 
-      const candidatePhone = form.getFieldValue("candidatePhone");
       const graduateSchool = String(form.getFieldValue("graduateSchool") ?? "").trim();
       if (!graduateSchool) throw new Error("请输入毕业学校");
 
@@ -180,37 +184,30 @@ export function FormPage() {
       if (type === "junior") {
         validateEnumValue(form.getFieldValue("upgradeIntent"), UPGRADE_INTENT_VALUES, "专升本意向");
       }
-
-      const totalScore = form.getFieldValue(["scores", "totalScore"]);
-      const rank = form.getFieldValue(["scores", "rank"]);
-      if (
-        (totalScore === undefined || totalScore === null || totalScore === "") &&
-        (rank === undefined || rank === null || rank === "")
-      ) {
-        throw new Error("总分或位次至少填写一项");
-      }
-
-      const intendedProvinces = form.getFieldValue("intendedProvinces");
-      if (!Array.isArray(intendedProvinces) || intendedProvinces.length === 0) {
-        throw new Error("请至少选择一个意向省份");
-      }
-
-      if (!candidatePhone) {
-        throw new Error("请输入考生电话");
-      }
     }
 
     if (targetStep === 1) {
+      const selected = form.getFieldValue(["scores", "subjectsSelected"]);
+      const list: string[] = Array.isArray(selected) ? selected : [];
+      const fixed = ["数学", "语文", "英语"];
+      const missingFixed = fixed.find((s) => !list.includes(s));
+      if (missingFixed) throw new Error("选科情况必须包含数学、语文、英语");
+      if (getOptionalSubjectCount(list) !== 3) {
+        throw new Error("除数学、语文、英语外，请再选择三门科目");
+      }
+    }
+
+    if (targetStep === 2) {
       const content = form.getFieldsValue(true) as any;
       validateMajorPreferences(content.majorPreferences as MajorPreferenceItem[] | undefined);
     }
   }
 
   async function goNext() {
-    if (step >= 1) return;
+    if (step >= 3) return;
     try {
-      await validateStep(0);
-      setStep(1);
+      await validateStep(step);
+      setStep(step + 1);
     } catch (err: any) {
       api.error(err?.message || "请先完成当前步骤的必填项");
     }
@@ -218,7 +215,7 @@ export function FormPage() {
 
   function goPrev() {
     if (step <= 0) return;
-    setStep(0);
+    setStep(step - 1);
   }
 
   async function saveDraft() {
@@ -244,6 +241,8 @@ export function FormPage() {
       setSubmitting(true);
       await validateStep(0);
       await validateStep(1);
+      await validateStep(2);
+      await validateStep(3);
       const content = form.getFieldsValue(true) as FormContent;
       if (!content) throw new Error("表单内容不能为空，无法提交");
       await updateMyForm(record._id, content);
@@ -268,8 +267,10 @@ export function FormPage() {
 
   const step0Sections = schema.filter((s) => s.step === 0);
   const step1Sections = schema.filter((s) => s.step === 1);
+  const step2Sections = schema.filter((s) => s.step === 2);
+  const step3Sections = schema.filter((s) => s.step === 3);
   const viewContent = mergeDefaultContent(type, record?.content ?? {});
-  const totalSteps = 2;
+  const totalSteps = 4;
   const effectiveType = record?.type ?? type;
 
   return (
@@ -306,15 +307,19 @@ export function FormPage() {
                 return;
               }
               try {
-                await validateStep(0);
+                for (let i = step; i < v; i++) {
+                  await validateStep(i);
+                }
                 setStep(v);
               } catch {
                 api.error("请先完成当前步骤的必填项");
               }
             }}
             items={[
-              { title: "基础信息与志愿条件" },
-              { title: "专业意向与梦想院校/备注" }
+              { title: "基础信息" },
+              { title: "成绩与身体" },
+              { title: "志愿条件" },
+              { title: "备注" }
             ]}
           />
         </AppCard>
@@ -330,15 +335,16 @@ export function FormPage() {
             <FormContentView type={effectiveType} content={viewContent as any} step={step as any} />
           ) : (
             <Form form={form} layout="vertical">
-              {step === 0 ? (
-                <FormStepOne sections={step0Sections} contentSnapshot={contentSnapshot} />
-              ) : (
+              {step === 0 ? <FormStepOne sections={step0Sections} contentSnapshot={contentSnapshot} /> : null}
+              {step === 1 ? <FormStepOne sections={step1Sections} contentSnapshot={contentSnapshot} /> : null}
+              {step === 2 ? (
                 <FormStepTwo
-                  sections={step1Sections}
+                  sections={step2Sections}
                   contentSnapshot={contentSnapshot}
                   majorCategories={majorCategories}
                 />
-              )}
+              ) : null}
+              {step === 3 ? <FormStepOne sections={step3Sections} contentSnapshot={contentSnapshot} /> : null}
             </Form>
           )
         )}
