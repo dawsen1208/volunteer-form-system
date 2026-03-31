@@ -12,9 +12,6 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +23,8 @@ jobs:
 
       - name: Resolve Config
         id: cfg
+        env:
+          AZURE_WEBAPP_PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         run: |
           APP_NAME="${{ vars.AZURE_WEBAPP_NAME }}"
           if [ -z "$APP_NAME" ]; then
@@ -35,34 +34,14 @@ jobs:
             echo "Missing app name: set Actions Variable AZURE_WEBAPP_NAME (recommended) or Secret AZURE_WEBAPP_NAME."
             exit 1
           fi
+          if [ -z "$AZURE_WEBAPP_PUBLISH_PROFILE" ]; then
+            echo "Missing publish profile: set Secret AZURE_WEBAPP_PUBLISH_PROFILE."
+            exit 1
+          fi
           echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
 
           SLOT_NAME="${{ vars.AZURE_WEBAPP_SLOT_NAME }}"
           echo "slot_name=$SLOT_NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve Credentials
-        id: cred
-        run: |
-          HAS_PUBLISH_PROFILE=0
-          if [ -n "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ]; then
-            HAS_PUBLISH_PROFILE=1
-          fi
-
-          HAS_OIDC=0
-          if [ -n "${{ secrets.AZURE_CLIENT_ID }}" ] && [ -n "${{ secrets.AZURE_TENANT_ID }}" ] && [ -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ]; then
-            HAS_OIDC=1
-          fi
-
-          if [ "$HAS_PUBLISH_PROFILE" -eq 0 ] && [ "$HAS_OIDC" -eq 0 ]; then
-            echo "Missing credentials: set Secret AZURE_WEBAPP_PUBLISH_PROFILE (recommended), or set Secrets AZURE_CLIENT_ID/AZURE_TENANT_ID/AZURE_SUBSCRIPTION_ID for OIDC."
-            exit 1
-          fi
-
-          if [ "$HAS_PUBLISH_PROFILE" -eq 1 ]; then
-            echo "method=publish_profile" >> "$GITHUB_OUTPUT"
-          else
-            echo "method=oidc" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Install, Typecheck, Build (server)
         working-directory: server
@@ -72,42 +51,19 @@ jobs:
           npm run build
           npm prune --omit=dev
 
-      - name: Deploy (Publish Profile / production)
-        if: steps.cfg.outputs.slot_name == '' && steps.cred.outputs.method == 'publish_profile'
+      - name: Deploy (production)
+        if: steps.cfg.outputs.slot_name == ''
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ steps.cfg.outputs.app_name }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ./server
 
-      - name: Deploy (Publish Profile / slot)
-        if: steps.cfg.outputs.slot_name != '' && steps.cred.outputs.method == 'publish_profile'
+      - name: Deploy (slot)
+        if: steps.cfg.outputs.slot_name != ''
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ steps.cfg.outputs.app_name }}
           slot-name: ${{ steps.cfg.outputs.slot_name }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ./server
-
-      - name: Azure Login (OIDC)
-        if: steps.cred.outputs.method == 'oidc'
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Deploy (OIDC / production)
-        if: steps.cfg.outputs.slot_name == '' && steps.cred.outputs.method == 'oidc'
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ steps.cfg.outputs.app_name }}
-          package: ./server
-
-      - name: Deploy (OIDC / slot)
-        if: steps.cfg.outputs.slot_name != '' && steps.cred.outputs.method == 'oidc'
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ steps.cfg.outputs.app_name }}
-          slot-name: ${{ steps.cfg.outputs.slot_name }}
           package: ./server
