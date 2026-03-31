@@ -5,9 +5,10 @@ import { getToken } from "../utils/storage";
 
 const rawBaseURL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const baseURL = rawBaseURL && rawBaseURL.trim() ? rawBaseURL.trim() : undefined;
+const fallbackBaseURL = import.meta.env.DEV ? "http://localhost:3001/api" : "/api";
 
 export const apiClient = axios.create({
-  baseURL: baseURL ?? "http://localhost:3001/api",
+  baseURL: baseURL ?? fallbackBaseURL,
   timeout: 15000
 });
 
