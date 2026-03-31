@@ -14,7 +14,9 @@ type Values = {
 export function LoginPage() {
   const navigate = useNavigate();
   const [api, contextHolder] = message.useMessage();
-  const publicUrl = "https://volunteerformapp.z1.web.core.windows.net/";
+  const rawPublicUrl = import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined;
+  const publicUrl =
+    rawPublicUrl && rawPublicUrl.trim() ? rawPublicUrl.trim() : window.location.origin;
 
   useEffect(() => {
     const auth = getAuth();

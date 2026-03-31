@@ -1,0 +1,46 @@
+name: Deploy Backend (Azure App Service)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - server/**
+      - .github/workflows/deploy-backend-appservice.yml
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install, Typecheck, Build (server)
+        working-directory: server
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+          npm prune --omit=dev
+
+      - name: Deploy (production)
+        if: vars.AZURE_WEBAPP_SLOT_NAME == ''
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./server
+
+      - name: Deploy (slot)
+        if: vars.AZURE_WEBAPP_SLOT_NAME != ''
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          slot-name: ${{ vars.AZURE_WEBAPP_SLOT_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./server

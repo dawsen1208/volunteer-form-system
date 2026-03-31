@@ -3,7 +3,8 @@ import axios, { AxiosError } from "axios";
 import type { ApiResponse } from "../types";
 import { getToken } from "../utils/storage";
 
-const baseURL = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const rawBaseURL = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const baseURL = rawBaseURL && rawBaseURL.trim() ? rawBaseURL.trim() : undefined;
 
 export const apiClient = axios.create({
   baseURL: baseURL ?? "http://localhost:3001/api",
@@ -51,4 +52,3 @@ export function unwrapOk<T>(raw: any): T {
   }
   return raw as T;
 }
-

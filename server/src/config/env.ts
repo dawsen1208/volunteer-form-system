@@ -17,5 +17,5 @@ export const env = {
   JWT_SECRET: requireEnv("JWT_SECRET"),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "7d",
   ADMIN_PASSWORD: requireEnv("ADMIN_PASSWORD"),
-  CORS_ORIGIN: process.env.CORS_ORIGIN ?? "*"
+  CORS_ORIGIN: process.env.CLIENT_ORIGIN ?? process.env.CORS_ORIGIN ?? "*"
 };
