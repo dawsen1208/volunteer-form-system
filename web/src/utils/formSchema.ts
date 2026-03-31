@@ -192,7 +192,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
     {
       key: "scores",
       title: "高考成绩",
-      step: 1,
+      step: 3,
       fields: [
         { name: ["scores", "totalScore"], label: "总分", required: true, editor: { type: "number", placeholder: "请输入" } },
         { name: ["scores", "rank"], label: "位次", required: true, editor: { type: "number", placeholder: "请输入" } },
@@ -275,7 +275,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
     {
       key: "family",
       title: "家庭与资源",
-      step: 1,
+      step: 2,
       fields: [
         { name: ["fatherOccupation"], label: "父亲职业", editor: { type: "input", placeholder: "请输入" } },
         { name: ["motherOccupation"], label: "母亲职业", editor: { type: "input", placeholder: "请输入" } },
@@ -292,7 +292,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
   const undergradSpecial: SectionDef = {
     key: "undergradSpecial",
     title: "本科专属志愿条件",
-    step: 2,
+    step: 4,
     fields: [
       {
         name: ["advanceBatchOptions"],
@@ -397,7 +397,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
   const juniorSpecial: SectionDef = {
     key: "juniorSpecial",
     title: "专科专属志愿条件",
-    step: 2,
+    step: 4,
     fields: [
       { name: ["juniorPlanIntent"], label: "升学规划意向", editor: { type: "input", placeholder: "请输入" } },
       { name: ["bachelorProvincePreference"], label: "本科目标省份偏好", editor: { type: "input", placeholder: "请输入" } },
@@ -438,11 +438,11 @@ export function getFormSchema(type: FormType): SectionDef[] {
     ]
   };
 
-  const step3: SectionDef[] = [
+  const step5: SectionDef[] = [
     {
       key: "step2Text",
       title: "梦想院校/备注",
-      step: 3,
+      step: 5,
       fields: [
         { name: ["dreamUniversityOrCity"], label: "梦中大学或城市", span: 2, editor: { type: "textarea", rows: 4, placeholder: "请输入" } },
         { name: ["finalRemarks"], label: "备注", span: 2, editor: { type: "textarea", rows: 4, placeholder: "请输入" } }
@@ -450,7 +450,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
     }
   ];
 
-  return [...base, type === "undergrad" ? undergradSpecial : juniorSpecial, ...step3];
+  return [...base, type === "undergrad" ? undergradSpecial : juniorSpecial, ...step5];
 }
 
 export function getValueAtPath(content: FormContent | undefined, path: (string | number)[]): unknown {

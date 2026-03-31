@@ -186,7 +186,7 @@ export function FormPage() {
       }
     }
 
-    if (targetStep === 1) {
+    if (targetStep === 3) {
       const selected = form.getFieldValue(["scores", "subjectsSelected"]);
       const list: string[] = Array.isArray(selected) ? selected : [];
       const fixed = ["数学", "语文", "英语"];
@@ -197,14 +197,14 @@ export function FormPage() {
       }
     }
 
-    if (targetStep === 2) {
+    if (targetStep === 4) {
       const content = form.getFieldsValue(true) as any;
       validateMajorPreferences(content.majorPreferences as MajorPreferenceItem[] | undefined);
     }
   }
 
   async function goNext() {
-    if (step >= 3) return;
+    if (step >= 5) return;
     try {
       await validateStep(step);
       setStep(step + 1);
@@ -243,6 +243,8 @@ export function FormPage() {
       await validateStep(1);
       await validateStep(2);
       await validateStep(3);
+      await validateStep(4);
+      await validateStep(5);
       const content = form.getFieldsValue(true) as FormContent;
       if (!content) throw new Error("表单内容不能为空，无法提交");
       await updateMyForm(record._id, content);
@@ -269,8 +271,10 @@ export function FormPage() {
   const step1Sections = schema.filter((s) => s.step === 1);
   const step2Sections = schema.filter((s) => s.step === 2);
   const step3Sections = schema.filter((s) => s.step === 3);
+  const step4Sections = schema.filter((s) => s.step === 4);
+  const step5Sections = schema.filter((s) => s.step === 5);
   const viewContent = mergeDefaultContent(type, record?.content ?? {});
-  const totalSteps = 4;
+  const totalSteps = 6;
   const effectiveType = record?.type ?? type;
 
   return (
@@ -317,7 +321,9 @@ export function FormPage() {
             }}
             items={[
               { title: "基础信息" },
-              { title: "成绩与身体" },
+              { title: "身体情况" },
+              { title: "家庭与资源" },
+              { title: "高考成绩" },
               { title: "志愿条件" },
               { title: "备注" }
             ]}
@@ -337,14 +343,16 @@ export function FormPage() {
             <Form form={form} layout="vertical">
               {step === 0 ? <FormStepOne sections={step0Sections} contentSnapshot={contentSnapshot} /> : null}
               {step === 1 ? <FormStepOne sections={step1Sections} contentSnapshot={contentSnapshot} /> : null}
-              {step === 2 ? (
+              {step === 2 ? <FormStepOne sections={step2Sections} contentSnapshot={contentSnapshot} /> : null}
+              {step === 3 ? <FormStepOne sections={step3Sections} contentSnapshot={contentSnapshot} /> : null}
+              {step === 4 ? (
                 <FormStepTwo
-                  sections={step2Sections}
+                  sections={step4Sections}
                   contentSnapshot={contentSnapshot}
                   majorCategories={majorCategories}
                 />
               ) : null}
-              {step === 3 ? <FormStepOne sections={step3Sections} contentSnapshot={contentSnapshot} /> : null}
+              {step === 5 ? <FormStepOne sections={step5Sections} contentSnapshot={contentSnapshot} /> : null}
             </Form>
           )
         )}

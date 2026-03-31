@@ -62,7 +62,7 @@ export function FormContentView(props: { type: FormType; content: FormContent; s
 
   return (
     <div className="space-y-4">
-      {props.step === undefined || props.step === 2 ? (
+      {props.step === undefined || props.step === 4 ? (
         <FormSectionCard title="专业意向表格">
           <div className="space-y-2">
             {majors.length ? (
