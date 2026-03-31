@@ -68,16 +68,10 @@ export function FormSchemaSection(props: Props) {
       return (
         <div className="space-y-2">
           <Checkbox.Group
-            value={[...new Set([...editor.fixed, ...optionalSelected])]}
             options={[
               ...editor.fixed.map((s) => ({ label: s, value: s, disabled: true })),
               ...optionalOptions
             ]}
-            onChange={(next) => {
-              const arr = Array.isArray(next) ? (next as string[]) : [];
-              const normalized = [...new Set([...editor.fixed, ...arr.filter((s) => editor.optional.includes(s))])];
-              form.setFieldValue(field.name as any, normalized);
-            }}
           />
           <div className="text-xs text-slate-500">
             固定科目：{editor.fixed.join("、")}；其余科目最多选择 {editor.maxOptional} 项
