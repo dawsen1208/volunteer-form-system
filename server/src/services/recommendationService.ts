@@ -7,9 +7,12 @@ import { AppError } from "../utils/errors";
 
 type RecommendInput = Record<string, any>;
 
-type RecommendResult = {
+export type RecommendationEngineResponse = {
+  ok: boolean;
+  mode?: string;
+  formType?: string;
   items: Array<Record<string, any>>;
-  meta?: Record<string, any>;
+  [key: string]: any;
 };
 
 function getScriptPath(): string {
@@ -52,7 +55,21 @@ async function runRscript(inputPath: string): Promise<string> {
   });
 }
 
-export async function recommend(content: RecommendInput): Promise<RecommendResult> {
+function extractJsonObject(text: string): string {
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed) return trimmed;
+  try {
+    JSON.parse(trimmed);
+    return trimmed;
+  } catch {
+    const first = trimmed.indexOf("{");
+    const last = trimmed.lastIndexOf("}");
+    if (first >= 0 && last > first) return trimmed.slice(first, last + 1);
+    return trimmed;
+  }
+}
+
+export async function recommend(content: RecommendInput): Promise<RecommendationEngineResponse> {
   const tmpFile = path.join(os.tmpdir(), `recommend_input_${Date.now()}.json`);
   const scriptPath = getScriptPath();
   const { data1, data2 } = getDataPaths();
@@ -82,12 +99,15 @@ export async function recommend(content: RecommendInput): Promise<RecommendResul
   try {
     const raw = await runRscript(tmpFile);
     await fs.rm(tmpFile, { force: true });
-    // R 端可能输出日志，提取最后一个 JSON 对象
-    const trimmed = String(raw).trim();
-    const start = trimmed.lastIndexOf("{");
-    const jsonText = start >= 0 ? trimmed.slice(start) : trimmed;
-    const parsed = JSON.parse(jsonText) as RecommendResult;
-    if (!parsed || !Array.isArray(parsed.items)) {
+    const jsonText = extractJsonObject(raw);
+    const parsed = JSON.parse(jsonText) as RecommendationEngineResponse;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("推荐结果不是 JSON 对象");
+    }
+    if (parsed.ok !== true) {
+      throw new Error("推荐引擎返回 ok=false");
+    }
+    if (!Array.isArray(parsed.items)) {
       throw new Error("推荐结果格式不正确");
     }
     return parsed;

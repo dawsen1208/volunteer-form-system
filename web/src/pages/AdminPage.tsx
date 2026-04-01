@@ -303,10 +303,10 @@ export function AdminPage() {
       const results = await Promise.all(
         payloads.map(async (content) => {
           const res = await apiClient.post("/recommendations", { content });
-          return (res.data as any)?.result;
+          return res.data as any;
         })
       );
-      const count = results.filter(Boolean).length;
+      const count = results.filter((r) => r && r.ok === true).length;
       api.success(`已生成 ${count} 条推荐结果`);
     } catch (err: any) {
       api.error(err?.message || "生成推荐失败");

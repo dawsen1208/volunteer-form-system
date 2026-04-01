@@ -19,7 +19,7 @@ export async function createRecommendationController(
       throw new AppError(400, "Invalid input");
     }
     const result = await recommend(content as Record<string, any>);
-    res.json({ ok: true, result });
+    res.json(result);
   } catch (err) {
     next(err);
   }
