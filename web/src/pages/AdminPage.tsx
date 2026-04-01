@@ -49,7 +49,7 @@ function getScoreFieldName(subject: string) {
   return null;
 }
 
-function buildExportHtml(forms: AdminFormRecord[]) {
+function buildExportHtml(forms: AdminFormRecord[], docTitle?: string) {
   const css = `
     @page { size: A4; margin: 16mm; }
     body { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; color: #111; }
@@ -72,8 +72,6 @@ function buildExportHtml(forms: AdminFormRecord[]) {
   function pageHtml(form: AdminFormRecord) {
     const content = form.content as FormContent;
     const name = formatTextValue("姓名", (content as any)?.name);
-    const phone = form.userId?.phone ?? "-";
-    const fillTime = (content as any)?.fillTime ? formatTime(String((content as any).fillTime)) : "-";
 
     const selectedSubjects: string[] = Array.isArray((content as any)?.scores?.subjectsSelected)
       ? ((content as any).scores.subjectsSelected as string[])
@@ -105,13 +103,6 @@ function buildExportHtml(forms: AdminFormRecord[]) {
     return `
       <div class="page">
         <h1>高考志愿填报约谈表</h1>
-        <div class="meta">
-          <div class="item">用户手机号：${escapeHtml(phone)}</div>
-          <div class="item">表单类型：${escapeHtml(mapFormType(form.type))}</div>
-          <div class="item">状态：${escapeHtml(form.status)}</div>
-          <div class="item">填表时间：${escapeHtml(fillTime)}</div>
-          <div class="item">提交时间：${escapeHtml(form.submittedAt ? formatTime(form.submittedAt) : "-")}</div>
-        </div>
 
         <div class="section-title">基础信息</div>
         <table>
@@ -206,7 +197,8 @@ function buildExportHtml(forms: AdminFormRecord[]) {
   }
 
   const body = forms.map(pageHtml).join("");
-  return `<!doctype html><html><head><meta charset="utf-8" /><title>表单导出</title><style>${css}</style></head><body>${body}</body></html>`;
+  const title = docTitle ?? "表单导出";
+  return `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(title)}</title><style>${css}</style></head><body>${body}</body></html>`;
 }
 
 function downloadWord(html: string, filename: string) {
@@ -295,18 +287,28 @@ export function AdminPage() {
     return ok;
   }
 
-  async function exportWord() {
+async function exportWord() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
-    const html = buildExportHtml(list);
-    downloadWord(html, `志愿表单导出-${new Date().toISOString().slice(0, 10)}.doc`);
+  const one = list.length === 1 ? list[0] : null;
+  const typeText = one ? mapFormType(one.type) : "志愿表单";
+  const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
+  const date = new Date().toISOString().slice(0, 10);
+  const filename = `${typeText}-${nameText}-导出-${date}.doc`;
+  const html = buildExportHtml(list, filename.replace(/\.doc$/,""));
+  downloadWord(html, filename);
   }
 
-  async function exportPdf() {
+async function exportPdf() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
-    const html = buildExportHtml(list);
-    printToPdf(html);
+  const one = list.length === 1 ? list[0] : null;
+  const typeText = one ? mapFormType(one.type) : "志愿表单";
+  const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
+  const date = new Date().toISOString().slice(0, 10);
+  const title = `${typeText}-${nameText}-导出-${date}`;
+  const html = buildExportHtml(list, title);
+  printToPdf(html);
   }
 
   const columns = useMemo<ColumnsType<AdminFormRecord>>(
