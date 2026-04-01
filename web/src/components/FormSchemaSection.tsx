@@ -44,6 +44,60 @@ function SubjectSelectionEditor(props: SubjectSelectionEditorProps) {
   );
 }
 
+type ProvinceOrderSelectProps = {
+  options: { label: string; value: any }[];
+  value?: string[];
+  onChange?: (value: string[]) => void;
+};
+
+function ProvinceOrderSelect(props: ProvinceOrderSelectProps) {
+  const selected: string[] = Array.isArray(props.value) ? (props.value as string[]) : [];
+
+  function move(from: number, to: number) {
+    const next = [...selected];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    props.onChange?.(next);
+  }
+
+  return (
+    <div className="space-y-2">
+      <Select
+        placeholder="请选择"
+        mode="multiple"
+        options={props.options}
+        allowClear
+        value={selected}
+        onChange={(v) => props.onChange?.(Array.isArray(v) ? (v as string[]) : [])}
+      />
+      {selected.length ? (
+        <div className="space-y-2 rounded-md border border-slate-200 p-3">
+          <div className="text-xs font-medium text-slate-700">已选省份排序（从上到下）</div>
+          <div className="space-y-2">
+            {selected.map((p, idx) => (
+              <div key={`${p}-${idx}`} className="flex items-center gap-2">
+                <div className="flex-1 text-sm text-slate-900">
+                  {idx + 1}. {p}
+                </div>
+                <Button size="small" disabled={idx === 0} onClick={() => move(idx, idx - 1)}>
+                  上移
+                </Button>
+                <Button
+                  size="small"
+                  disabled={idx === selected.length - 1}
+                  onClick={() => move(idx, idx + 1)}
+                >
+                  下移
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type Props = {
   section: SectionDef;
   contentSnapshot: any;
@@ -80,7 +134,6 @@ function renderEditor(field: FieldDef) {
 }
 
 export function FormSchemaSection(props: Props) {
-  const form = Form.useFormInstance();
   const fields = props.section.fields;
 
   function renderField(field: FieldDef) {
@@ -107,47 +160,7 @@ export function FormSchemaSection(props: Props) {
       field.name.length === 1 &&
       field.name[0] === "intendedProvinces"
     ) {
-      const value = form.getFieldValue(field.name as any);
-      const selected: string[] = Array.isArray(value) ? value : [];
-
-      function move(from: number, to: number) {
-        const next = [...selected];
-        const [item] = next.splice(from, 1);
-        next.splice(to, 0, item);
-        form.setFieldValue(field.name as any, next);
-      }
-
-      return (
-        <div className="space-y-2">
-          {renderEditor(field)}
-          {selected.length ? (
-            <div className="space-y-2 rounded-md border border-slate-200 p-3">
-              <div className="text-xs font-medium text-slate-700">已选省份排序（从上到下）</div>
-              <div className="space-y-2">
-                {selected.map((p, idx) => (
-                  <div key={`${p}-${idx}`} className="flex items-center gap-2">
-                    <div className="flex-1 text-sm text-slate-900">{idx + 1}. {p}</div>
-                    <Button
-                      size="small"
-                      disabled={idx === 0}
-                      onClick={() => move(idx, idx - 1)}
-                    >
-                      上移
-                    </Button>
-                    <Button
-                      size="small"
-                      disabled={idx === selected.length - 1}
-                      onClick={() => move(idx, idx + 1)}
-                    >
-                      下移
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      );
+      return <ProvinceOrderSelect options={editor.options} />;
     }
 
     return renderEditor(field);
