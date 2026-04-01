@@ -1,8 +1,9 @@
-import { Button, Empty, Popconfirm, Select, Spin, message } from "antd";
+import { Alert, Button, Empty, Modal, Popconfirm, Select, Spin, Table, message } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { deleteMyDraft, getMyForms } from "../api/forms";
+import { apiClient } from "../api/client";
 import { AppCard } from "../components/AppCard";
 import { PageHeader } from "../components/PageHeader";
 import { StatusTag } from "../components/StatusTag";
@@ -23,6 +24,10 @@ export function RecordsPage() {
   const [forms, setForms] = useState<FormRecord[]>([]);
   const [typeFilter, setTypeFilter] = useState<FormType | "all">("all");
   const [statusFilter, setStatusFilter] = useState<FormStatus | "all">("all");
+  const [recOpen, setRecOpen] = useState(false);
+  const [recLoading, setRecLoading] = useState(false);
+  const [recItems, setRecItems] = useState<any[]>([]);
+  const [recTitle, setRecTitle] = useState("");
 
   async function load() {
     try {
@@ -39,6 +44,24 @@ export function RecordsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  async function openRecommendation(form: FormRecord) {
+    try {
+      setRecLoading(true);
+      setRecTitle(`${mapFormType(form.type)} - ${String((form.content as any)?.name ?? "")}`);
+      const res = await apiClient.post("/recommendations", { content: form.content });
+      const data = res.data as any;
+      if (!data || data.ok !== true || !Array.isArray(data.items)) {
+        throw new Error("推荐结果格式不正确");
+      }
+      setRecItems(data.items);
+      setRecOpen(true);
+    } catch (err: any) {
+      api.error(err?.message || "获取推荐失败");
+    } finally {
+      setRecLoading(false);
+    }
+  }
 
   const filtered = forms.filter((f) => {
     if (typeFilter !== "all" && f.type !== typeFilter) return false;
@@ -118,6 +141,7 @@ export function RecordsPage() {
             </div>
           </AppCard>
         ) : (
+          <>
           <div className="space-y-4">
             {drafts.length ? (
               <div className="space-y-3">
@@ -201,12 +225,59 @@ export function RecordsPage() {
                       <Button onClick={() => navigate(`/form/${f.type}?id=${f._id}`)}>
                         查看详情
                       </Button>
+                      <Button onClick={() => openRecommendation(f)}>
+                        查看推荐
+                      </Button>
                     </div>
                   </AppCard>
                 ))}
               </div>
             ) : null}
           </div>
+          <Modal
+            title={`推荐结果 - ${recTitle}`}
+            open={recOpen}
+            onCancel={() => setRecOpen(false)}
+            footer={null}
+            width={900}
+          >
+            <Alert
+              type="warning"
+              showIcon
+              message="推荐功能声明"
+              description="本推荐功能仅用于提供志愿填报建议，不包含录取预测功能；参与分析的所有数据均为往年数据，不保证推荐学校在当年一定能录取。"
+              className="mb-3"
+            />
+            {recLoading ? (
+              <div className="flex justify-center py-8">
+                <Spin />
+              </div>
+            ) : recItems.length ? (
+              <Table
+                rowKey={(r) => r.code ?? `${r.school}-${r.major}-${Math.random()}`}
+                dataSource={recItems}
+                pagination={{ pageSize: 10 }}
+                columns={[
+                  { title: "代码", dataIndex: "code" },
+                  { title: "学校", dataIndex: "school" },
+                  { title: "专业", dataIndex: "major" },
+                  { title: "计划数", dataIndex: "planCount" },
+                  { title: "位次(用户)", dataIndex: "userRank" },
+                  { title: "位次(最低)", dataIndex: "minRank" },
+                  { title: "位次差", dataIndex: "rankGap" },
+                  { title: "分数(用户)", dataIndex: "userScore" },
+                  { title: "分数(最低)", dataIndex: "minScore" },
+                  { title: "分差", dataIndex: "scoreGap" },
+                  { title: "专业匹配", dataIndex: "majorMatchScore" },
+                  { title: "推荐分", dataIndex: "recommendationScore" },
+                  { title: "风险", dataIndex: "riskLabel" }
+                ]}
+              />
+            ) : (
+              <Empty description="暂无推荐结果" />
+            )}
+          </Modal>
+          </>
         )}
       </div>
     </MainLayout>
