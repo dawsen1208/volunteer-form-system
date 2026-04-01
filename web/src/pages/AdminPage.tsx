@@ -1,4 +1,4 @@
-import { Button, Input, Select, Space, Spin, Table, message } from "antd";
+import { Alert, Button, Input, Select, Space, Spin, Table, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -439,6 +439,13 @@ async function exportPdf() {
               </Button>
             </Space>
           </div>
+          <Alert
+            type="warning"
+            showIcon
+            message="推荐功能声明"
+            description="本推荐功能仅用于提供志愿填报建议，不包含录取预测功能；参与分析的所有数据均为往年数据，不保证推荐学校在当年一定能录取。"
+            className="mb-4"
+          />
           {loading ? (
             <div className="flex justify-center py-10">
               <Spin />
