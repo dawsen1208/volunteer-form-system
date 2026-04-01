@@ -6,6 +6,44 @@ import type { FieldDef, SectionDef } from "../utils/formSchema";
 import { normalizeRequired, normalizeVisible } from "../utils/formSchema";
 import { FormSectionCard } from "./FormSectionCard";
 
+type SubjectSelectionEditorProps = {
+  fixed: string[];
+  optional: string[];
+  maxOptional: number;
+  value?: string[];
+  onChange?: (value: string[]) => void;
+};
+
+function SubjectSelectionEditor(props: SubjectSelectionEditorProps) {
+  const selected = Array.isArray(props.value) ? props.value : [];
+  const fixedSet = new Set(props.fixed);
+  const optionalSelected = selected.filter((s) => props.optional.includes(s)).slice(0, props.maxOptional);
+
+  const optionalOptions = props.optional.map((o) => ({
+    label: o,
+    value: o,
+    disabled: !optionalSelected.includes(o) && optionalSelected.length >= props.maxOptional
+  }));
+
+  return (
+    <div className="space-y-2">
+      <Checkbox.Group
+        value={[...new Set([...props.fixed, ...optionalSelected])]}
+        options={[...props.fixed.map((s) => ({ label: s, value: s, disabled: true })), ...optionalOptions]}
+        onChange={(next) => {
+          const arr = Array.isArray(next) ? (next as string[]) : [];
+          const normalizedOptional = arr.filter((s) => props.optional.includes(s)).slice(0, props.maxOptional);
+          const normalized = [...props.fixed, ...normalizedOptional];
+          props.onChange?.(normalized);
+        }}
+      />
+      <div className="text-xs text-slate-500">
+        固定科目：{props.fixed.join("、")}；其余科目最多选择 {props.maxOptional} 项
+      </div>
+    </div>
+  );
+}
+
 type Props = {
   section: SectionDef;
   contentSnapshot: any;
@@ -54,29 +92,12 @@ export function FormSchemaSection(props: Props) {
     }
 
     if (editor.type === "subjectSelection") {
-      const value = form.getFieldValue(field.name as any);
-      const selected: string[] = Array.isArray(value) ? value : [];
-      const fixedSet = new Set(editor.fixed);
-      const optionalSelected = selected.filter((s) => !fixedSet.has(s));
-
-      const optionalOptions = editor.optional.map((o) => ({
-        label: o,
-        value: o,
-        disabled: !optionalSelected.includes(o) && optionalSelected.length >= editor.maxOptional
-      }));
-
       return (
-        <div className="space-y-2">
-          <Checkbox.Group
-            options={[
-              ...editor.fixed.map((s) => ({ label: s, value: s, disabled: true })),
-              ...optionalOptions
-            ]}
-          />
-          <div className="text-xs text-slate-500">
-            固定科目：{editor.fixed.join("、")}；其余科目最多选择 {editor.maxOptional} 项
-          </div>
-        </div>
+        <SubjectSelectionEditor
+          fixed={editor.fixed}
+          optional={editor.optional}
+          maxOptional={editor.maxOptional}
+        />
       );
     }
 
