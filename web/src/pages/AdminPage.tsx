@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getAdminFormById, getAdminForms } from "../api/admin";
+import { apiClient } from "../api/client";
 import { AppCard } from "../components/AppCard";
 import { PageHeader } from "../components/PageHeader";
 import { StatusTag } from "../components/StatusTag";
@@ -287,6 +288,33 @@ export function AdminPage() {
     return ok;
   }
 
+  async function generateRecommendations() {
+    const ids = selectedIds;
+    if (!ids.length) {
+      api.error("请先勾选要生成推荐的表单");
+      return;
+    }
+    try {
+      setLoading(true);
+      const details = await Promise.all(ids.map(getAdminFormById));
+      const payloads = details
+        .map((d) => d.content)
+        .filter((c) => c && typeof c === "object");
+      const results = await Promise.all(
+        payloads.map(async (content) => {
+          const res = await apiClient.post("/recommendations", { content });
+          return (res.data as any)?.result;
+        })
+      );
+      const count = results.filter(Boolean).length;
+      api.success(`已生成 ${count} 条推荐结果`);
+    } catch (err: any) {
+      api.error(err?.message || "生成推荐失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
 async function exportWord() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
@@ -405,6 +433,9 @@ async function exportPdf() {
               </Button>
               <Button disabled={!selectedIds.length} onClick={exportWord}>
                 导出 Word
+              </Button>
+              <Button type="primary" disabled={!selectedIds.length} onClick={generateRecommendations}>
+                生成推荐
               </Button>
             </Space>
           </div>
