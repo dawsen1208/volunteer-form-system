@@ -15,25 +15,62 @@ export type RecommendationEngineResponse = {
   [key: string]: any;
 };
 
-function getScriptPath(): string {
-  // ../../scripts/recommend_engine.R relative to this file
-  return path.resolve(__dirname, "../../scripts/recommend_engine.R");
+async function pickFirstExistingPath(candidates: string[]): Promise<string | null> {
+  for (const p of candidates) {
+    try {
+      await fs.access(p);
+      return p;
+    } catch {
+      // continue
+    }
+  }
+  return null;
 }
 
-function getDataPaths(): { data1: string; data2: string } {
-  const base = path.resolve(__dirname, "../../data");
-  return {
-    data1: path.join(base, "admission_training_data_01.xlsx"),
-    data2: path.join(base, "admission_training_data_02.xlsx")
-  };
+async function resolveScriptPath(): Promise<string> {
+  const name = "recommend_engine.R";
+  const candidates = [
+    path.resolve(__dirname, "../../../scripts", name),
+    path.resolve(__dirname, "../../scripts", name),
+    path.resolve(process.cwd(), "scripts", name),
+    path.resolve(process.cwd(), "server", "scripts", name)
+  ];
+  const found = await pickFirstExistingPath(candidates);
+  if (!found) {
+    throw new AppError(
+      500,
+      "推荐引擎脚本不存在：请确保 recommend_engine.R 已随部署发布到 server/scripts/（或当前运行目录 scripts/）"
+    );
+  }
+  return found;
 }
 
-async function runRscript(inputPath: string): Promise<string> {
+async function resolveDataPaths(): Promise<{ data1: string; data2: string }> {
+  const f1 = "admission_training_data_01.xlsx";
+  const f2 = "admission_training_data_02.xlsx";
+  const bases = [
+    path.resolve(__dirname, "../../../data"),
+    path.resolve(__dirname, "../../data"),
+    path.resolve(process.cwd(), "data"),
+    path.resolve(process.cwd(), "server", "data")
+  ];
+  const candidates1 = bases.map((b) => path.join(b, f1));
+  const candidates2 = bases.map((b) => path.join(b, f2));
+  const data1 = await pickFirstExistingPath(candidates1);
+  const data2 = await pickFirstExistingPath(candidates2);
+  if (!data1 || !data2) {
+    throw new AppError(
+      500,
+      "训练数据文件不存在：请确保 admission_training_data_01.xlsx 与 admission_training_data_02.xlsx 已随部署发布到 server/data/（或当前运行目录 data/）"
+    );
+  }
+  return { data1, data2 };
+}
+
+async function runRscript(scriptPath: string, data1: string, data2: string, inputPath: string): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
-    const script = getScriptPath();
-    const { data1, data2 } = getDataPaths();
-    const args = [script, "--input", inputPath, "--data1", data1, "--data2", data2];
-    const proc = spawn("Rscript", args, {
+    const args = [scriptPath, "--input", inputPath, "--data1", data1, "--data2", data2];
+    const proc = spawn(process.env.RSCRIPT_BIN ?? "Rscript", args, {
       stdio: ["ignore", "pipe", "pipe"]
     });
 
@@ -71,33 +108,14 @@ function extractJsonObject(text: string): string {
 
 export async function recommend(content: RecommendInput): Promise<RecommendationEngineResponse> {
   const tmpFile = path.join(os.tmpdir(), `recommend_input_${Date.now()}.json`);
-  const scriptPath = getScriptPath();
-  const { data1, data2 } = getDataPaths();
 
   // Write input
   await fs.writeFile(tmpFile, JSON.stringify(content ?? {}, null, 2), "utf8");
 
   try {
-    // Ensure script exists
-    await fs.access(scriptPath);
-  } catch {
-    await fs.rm(tmpFile, { force: true });
-    throw new AppError(
-      500,
-      "推荐引擎脚本不存在：请在 server/scripts/ 下添加 recommend_engine.R"
-    );
-  }
-  try {
-    // Ensure data files exist
-    await fs.access(data1);
-    await fs.access(data2);
-  } catch {
-    await fs.rm(tmpFile, { force: true });
-    throw new AppError(500, "训练数据文件不存在：请在 server/data/ 下添加 admission_training_data_01.xlsx 与 admission_training_data_02.xlsx");
-  }
-
-  try {
-    const raw = await runRscript(tmpFile);
+    const scriptPath = await resolveScriptPath();
+    const { data1, data2 } = await resolveDataPaths();
+    const raw = await runRscript(scriptPath, data1, data2, tmpFile);
     await fs.rm(tmpFile, { force: true });
     const jsonText = extractJsonObject(raw);
     const parsed = JSON.parse(jsonText) as RecommendationEngineResponse;
