@@ -84,8 +84,7 @@ export function AdminFormDetailPage() {
 
             {content ? (
               <div className="space-y-4">
-                <FormContentView type={form.type} content={content} step={0} />
-                <FormContentView type={form.type} content={content} step={1} />
+                <FormContentView type={form.type} content={content} />
               </div>
             ) : (
               <AppCard>
