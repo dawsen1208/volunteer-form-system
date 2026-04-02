@@ -436,8 +436,8 @@ build_result <- function(admission_df, rank_df, parsed_input) {
   if (is.na(user_score) && !is.na(user_rank)) {
     user_score <- get_score_from_rank(user_rank, rank_df)
   }
-  
-  result_df <- admission_df %>%
+
+  candidate_df <- admission_df %>%
     transmute(
       code = code,
       school = school,
@@ -445,34 +445,67 @@ build_result <- function(admission_df, rank_df, parsed_input) {
       planCount = planCount,
       minRank = minRank,
       minScore = minScore
-    ) %>%
+    )
+
+  if (!is.na(user_score)) {
+    candidate_df <- candidate_df %>% filter(!is.na(minScore))
+    low <- user_score - 120
+    high <- user_score + 40
+    candidate_df <- candidate_df %>% filter(minScore >= low & minScore <= high)
+    if (nrow(candidate_df) > 60000) {
+      low <- user_score - 80
+      high <- user_score + 30
+      candidate_df <- candidate_df %>% filter(minScore >= low & minScore <= high)
+    }
+    if (nrow(candidate_df) > 60000) {
+      low <- user_score - 60
+      high <- user_score + 25
+      candidate_df <- candidate_df %>% filter(minScore >= low & minScore <= high)
+    }
+  }
+
+  if (!is.na(user_rank)) {
+    candidate_df <- candidate_df %>% filter(!is.na(minRank))
+    low_r <- user_rank - 50000
+    high_r <- user_rank + 50000
+    candidate_df <- candidate_df %>% filter(minRank >= low_r & minRank <= high_r)
+    if (nrow(candidate_df) > 60000) {
+      low_r <- user_rank - 30000
+      high_r <- user_rank + 30000
+      candidate_df <- candidate_df %>% filter(minRank >= low_r & minRank <= high_r)
+    }
+  }
+
+  base_df <- candidate_df %>%
     mutate(
       userRank = user_rank,
       userScore = user_score,
-      
-      rankGap = ifelse(
-        !is.na(user_rank) & !is.na(minRank),
-        user_rank - minRank,
-        NA_real_
-      ),
-      
-      scoreGap = ifelse(
-        !is.na(user_score) & !is.na(minScore),
-        user_score - minScore,
-        NA_real_
-      ),
-      
-      majorMatchScore = sapply(major, function(m) {
-        get_major_match_score(major_preferences, m)
-      })
-    ) %>%
-    mutate(
-      recommendationScore =
+      rankGap = ifelse(!is.na(user_rank) & !is.na(minRank), user_rank - minRank, NA_real_),
+      scoreGap = ifelse(!is.na(user_score) & !is.na(minScore), user_score - minScore, NA_real_),
+      baseScore =
         ifelse(is.na(scoreGap), 0, scoreGap * 0.35) +
         ifelse(is.na(rankGap), 0, -rankGap / 1000 * 0.35) +
-        majorMatchScore * 20 +
-        ifelse(is.na(planCount), 0, log1p(planCount) * 2),
-      
+        ifelse(is.na(planCount), 0, log1p(planCount) * 2)
+    ) %>%
+    arrange(desc(baseScore))
+
+  pre_n <- as.integer(max(top_n * 400, 5000))
+  if (pre_n > 20000) pre_n <- 20000L
+  if (nrow(base_df) > pre_n) {
+    base_df <- base_df %>% slice_head(n = pre_n)
+  }
+
+  if (length(major_preferences) == 0) {
+    base_df$majorMatchScore <- 0
+  } else {
+    base_df$majorMatchScore <- sapply(base_df$major, function(m) {
+      get_major_match_score(major_preferences, m)
+    })
+  }
+
+  result_df <- base_df %>%
+    mutate(
+      recommendationScore = baseScore + majorMatchScore * 20,
       riskLabel = mapply(get_risk_label, scoreGap, rankGap)
     ) %>%
     arrange(desc(recommendationScore)) %>%
