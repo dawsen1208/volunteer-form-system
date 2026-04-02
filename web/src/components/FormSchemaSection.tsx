@@ -139,11 +139,18 @@ function HomeAddressEditor(props: { value?: HomeAddressValue | string; onChange?
       {cityOptions.length ? (
         <Select
           placeholder="市"
+          mode="tags"
+          maxTagCount={1}
+          tokenSeparators={[" "]}
           options={cityOptions.map((c) => ({ label: c, value: c }))}
-          value={city || undefined}
+          value={city ? [city] : []}
           showSearch
           allowClear
-          onChange={(next) => update({ city: normalizeText(next) })}
+          onChange={(next) => {
+            const arr = Array.isArray(next) ? (next as string[]) : [];
+            const last = normalizeText(arr[arr.length - 1]);
+            update({ city: last });
+          }}
         />
       ) : (
         <Input placeholder="市" value={city} onChange={(e) => update({ city: e.target.value })} />
@@ -152,11 +159,18 @@ function HomeAddressEditor(props: { value?: HomeAddressValue | string; onChange?
       {countyOptions.length ? (
         <Select
           placeholder="县/区"
+          mode="tags"
+          maxTagCount={1}
+          tokenSeparators={[" "]}
           options={countyOptions.map((c) => ({ label: c, value: c }))}
-          value={county || undefined}
+          value={county ? [county] : []}
           showSearch
           allowClear
-          onChange={(next) => update({ county: normalizeText(next) })}
+          onChange={(next) => {
+            const arr = Array.isArray(next) ? (next as string[]) : [];
+            const last = normalizeText(arr[arr.length - 1]);
+            update({ county: last });
+          }}
         />
       ) : (
         <Input placeholder="县/区" value={county} onChange={(e) => update({ county: e.target.value })} />
