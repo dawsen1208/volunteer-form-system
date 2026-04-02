@@ -1,5 +1,5 @@
 import { Alert, Button, Empty, Modal, Popconfirm, Select, Spin, Table, message } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { deleteMyDraft, getMyForms } from "../api/forms";
@@ -17,6 +17,32 @@ function formatTime(value: string) {
   return t.toLocaleString();
 }
 
+function getRecommendationCacheKey(form: FormRecord) {
+  return `recommendation:${form._id}:${form.updatedAt}`;
+}
+
+function readRecommendationCache(form: FormRecord): any[] | null {
+  try {
+    const key = getRecommendationCacheKey(form);
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { items?: unknown };
+    if (!parsed || typeof parsed !== "object") return null;
+    return Array.isArray((parsed as any).items) ? ((parsed as any).items as any[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeRecommendationCache(form: FormRecord, items: any[]) {
+  try {
+    const key = getRecommendationCacheKey(form);
+    sessionStorage.setItem(key, JSON.stringify({ items, createdAt: Date.now() }));
+  } catch {
+    // ignore
+  }
+}
+
 export function RecordsPage() {
   const navigate = useNavigate();
   const [api, contextHolder] = message.useMessage();
@@ -28,6 +54,7 @@ export function RecordsPage() {
   const [recLoading, setRecLoading] = useState(false);
   const [recItems, setRecItems] = useState<any[]>([]);
   const [recTitle, setRecTitle] = useState("");
+  const pendingRecommendationIds = useRef<Set<string>>(new Set());
 
   async function load() {
     try {
@@ -46,20 +73,46 @@ export function RecordsPage() {
   }, []);
 
   async function openRecommendation(form: FormRecord) {
-    try {
-      setRecLoading(true);
+    const cached = readRecommendationCache(form);
+    if (cached && cached.length) {
       setRecTitle(`${mapFormType(form.type)} - ${String((form.content as any)?.name ?? "")}`);
+      setRecItems(cached);
+      setRecOpen(true);
+      return;
+    }
+
+    if (pendingRecommendationIds.current.has(form._id)) {
+      Modal.info({
+        title: "正在为您推荐中，请稍后",
+        content: "模型正在运行，请稍后再点击“查看推荐”。"
+      });
+      return;
+    }
+
+    pendingRecommendationIds.current.add(form._id);
+    const loadingModal = Modal.info({
+      title: "正在为您推荐中，请稍后",
+      content: "模型运行中，完成后会提示您再次点击“查看推荐”即可查看推荐的学校与专业。",
+      okText: "我知道了"
+    });
+
+    try {
       const res = await apiClient.post("/recommendations", { content: form.content });
       const data = res.data as any;
       if (!data || data.ok !== true || !Array.isArray(data.items)) {
         throw new Error("推荐结果格式不正确");
       }
-      setRecItems(data.items);
-      setRecOpen(true);
+      writeRecommendationCache(form, data.items);
+      loadingModal.destroy();
+      Modal.success({
+        title: "推荐已生成",
+        content: "再次点击“查看推荐”即可查看推荐的学校与专业。"
+      });
     } catch (err: any) {
+      loadingModal.destroy();
       api.error(err?.message || "获取推荐失败");
     } finally {
-      setRecLoading(false);
+      pendingRecommendationIds.current.delete(form._id);
     }
   }
 
