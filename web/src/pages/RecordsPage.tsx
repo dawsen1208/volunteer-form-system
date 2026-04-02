@@ -1,5 +1,5 @@
 import { Alert, Button, Empty, Modal, Popconfirm, Select, Spin, Table, message } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { deleteMyDraft, getMyForms } from "../api/forms";
@@ -83,7 +83,8 @@ export function RecordsPage() {
   const [recLoading, setRecLoading] = useState(false);
   const [recItems, setRecItems] = useState<any[]>([]);
   const [recTitle, setRecTitle] = useState("");
-  const pendingRecommendationIds = useRef<Set<string>>(new Set());
+  const [pendingRecommendationIds, setPendingRecommendationIds] = useState<Set<string>>(() => new Set());
+  const [readyRecommendationIds, setReadyRecommendationIds] = useState<Set<string>>(() => new Set());
 
   async function load() {
     try {
@@ -110,15 +111,12 @@ export function RecordsPage() {
       return;
     }
 
-    if (pendingRecommendationIds.current.has(form._id)) {
-      Modal.info({
-        title: "正在为您推荐中，请稍后",
-        content: "模型正在运行，请稍后再点击“查看推荐”。"
-      });
+    if (pendingRecommendationIds.has(form._id)) {
+      api.info("模型正在运行中，请稍后…");
       return;
     }
 
-    pendingRecommendationIds.current.add(form._id);
+    setPendingRecommendationIds((prev) => new Set([...prev, form._id]));
     const loadingModal = Modal.info({
       title: "正在为您推荐中，请稍后",
       content: "模型运行中，完成后会提示您再次点击“查看推荐”即可查看推荐的学校与专业。",
@@ -136,6 +134,7 @@ export function RecordsPage() {
       loadingModal.destroy();
       if (ready && ready.length) {
         writeRecommendationCache(form, ready);
+        setReadyRecommendationIds((prev) => new Set([...prev, form._id]));
         Modal.success({
           title: "推荐已生成",
           content: "再次点击“查看推荐”即可查看推荐的学校与专业。"
@@ -150,7 +149,11 @@ export function RecordsPage() {
       loadingModal.destroy();
       api.error(err?.message || "获取推荐失败");
     } finally {
-      pendingRecommendationIds.current.delete(form._id);
+      setPendingRecommendationIds((prev) => {
+        const next = new Set(prev);
+        next.delete(form._id);
+        return next;
+      });
     }
   }
 
@@ -166,6 +169,15 @@ export function RecordsPage() {
   const submitted = filtered
     .filter((f) => f.status === "submitted")
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+  const cachedSubmittedIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const f of submitted) {
+      const cached = readRecommendationCache(f);
+      if (cached && cached.length) ids.add(f._id);
+    }
+    return ids;
+  }, [submitted, readyRecommendationIds]);
 
   return (
     <MainLayout title="我的提交记录">
@@ -316,8 +328,12 @@ export function RecordsPage() {
                       <Button onClick={() => navigate(`/form/${f.type}?id=${f._id}`)}>
                         查看详情
                       </Button>
-                      <Button onClick={() => openRecommendation(f)}>
-                        查看推荐
+                      <Button
+                        loading={pendingRecommendationIds.has(f._id)}
+                        disabled={pendingRecommendationIds.has(f._id)}
+                        onClick={() => openRecommendation(f)}
+                      >
+                        {cachedSubmittedIds.has(f._id) ? "查看推荐（已生成）" : "查看推荐"}
                       </Button>
                     </div>
                   </AppCard>
