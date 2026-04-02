@@ -20,6 +20,7 @@ export type RecommendationEngineResponse = {
 
 export type RecommendationStatusResponse =
   | { ok: true; status: "done"; result: RecommendationEngineResponse }
+  | { ok: true; status: "failed"; message: string }
   | { ok: true; status: "pending" }
   | { ok: true; status: "none" };
 
@@ -27,6 +28,12 @@ type RecommendationCacheEntry = {
   forUpdatedAt: string;
   result: RecommendationEngineResponse;
   generatedAt: string;
+};
+
+type RecommendationErrorEntry = {
+  forUpdatedAt: string;
+  message: string;
+  failedAt: string;
 };
 
 type RunningJob = {
@@ -58,6 +65,16 @@ function readRecommendationCache(formDoc: any): RecommendationCacheEntry | null 
   if (typeof entry.forUpdatedAt !== "string") return null;
   if (!entry.result || typeof entry.result !== "object") return null;
   return entry as RecommendationCacheEntry;
+}
+
+function readRecommendationError(formDoc: any): RecommendationErrorEntry | null {
+  const c = formDoc?.content;
+  if (!c || typeof c !== "object") return null;
+  const entry = (c as any).__recommendationError;
+  if (!entry || typeof entry !== "object") return null;
+  if (typeof entry.forUpdatedAt !== "string") return null;
+  if (typeof entry.message !== "string") return null;
+  return entry as RecommendationErrorEntry;
 }
 
 async function pickFirstExistingPath(candidates: string[]): Promise<string | null> {
@@ -220,6 +237,10 @@ export async function getRecommendationStatus(params: {
   if (cache && cache.forUpdatedAt === updatedAt && cache.result?.ok === true && Array.isArray(cache.result.items)) {
     return { ok: true, status: "done", result: cache.result };
   }
+  const error = readRecommendationError(doc);
+  if (error && error.forUpdatedAt === updatedAt && error.message.trim()) {
+    return { ok: true, status: "failed", message: error.message };
+  }
   if (runningJobs.has(formId)) return { ok: true, status: "pending" };
   return { ok: true, status: "none" };
 }
@@ -243,6 +264,10 @@ export async function requestRecommendation(params: {
   if (cache && cache.forUpdatedAt === updatedAt && cache.result?.ok === true && Array.isArray(cache.result.items)) {
     return { ok: true, status: "done", result: cache.result };
   }
+  const error = readRecommendationError(doc);
+  if (error && error.forUpdatedAt === updatedAt && error.message.trim()) {
+    return { ok: true, status: "failed", message: error.message };
+  }
 
   if (runningJobs.has(formId)) return { ok: true, status: "pending" };
 
@@ -253,6 +278,15 @@ export async function requestRecommendation(params: {
       const entry: RecommendationCacheEntry = { forUpdatedAt: updatedAt, result, generatedAt: new Date().toISOString() };
       const nextContent = typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
       (nextContent as any).__recommendation = entry;
+      delete (nextContent as any).__recommendationError;
+      doc.content = nextContent;
+      await doc.save();
+    } catch (err: any) {
+      const message = String(err?.message || "推荐生成失败");
+      const entry: RecommendationErrorEntry = { forUpdatedAt: updatedAt, message, failedAt: new Date().toISOString() };
+      const nextContent = typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
+      (nextContent as any).__recommendationError = entry;
+      delete (nextContent as any).__recommendation;
       doc.content = nextContent;
       await doc.save();
     } finally {

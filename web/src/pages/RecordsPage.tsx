@@ -52,11 +52,20 @@ async function pollRecommendationReady(formId: string, maxMs: number) {
       if (data && data.ok === true && data.status === "done" && data.result && Array.isArray(data.result.items)) {
         return data.result.items as any[];
       }
+      if (data && data.ok === true && data.status === "failed" && typeof data.message === "string") {
+        throw new Error(data.message);
+      }
       if (data && data.ok === true && data.status === "pending") {
         // continue
       }
-    } catch {
-      // ignore and retry
+      if (data && data.ok === true && data.status === "none") {
+        throw new Error("推荐生成未开始或已失败，请重试");
+      }
+    } catch (err: any) {
+      const msg = String(err?.message || "");
+      if (msg) {
+        throw err;
+      }
     }
     await new Promise((r) => setTimeout(r, 5000));
   }
