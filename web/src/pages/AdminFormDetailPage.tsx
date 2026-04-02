@@ -112,6 +112,27 @@ export function AdminFormDetailPage() {
     }
   }
 
+  async function testRecommendationSync() {
+    if (!content) return;
+    try {
+      setRecLoading(true);
+      const started = Date.now();
+      const res = await apiClient.post("/recommendations", { content });
+      const data = res.data as any;
+      if (!data || data.ok !== true || !Array.isArray(data.items)) {
+        throw new Error("推荐结果格式不正确");
+      }
+      const ms = Date.now() - started;
+      setRecItems(data.items);
+      setRecOpen(true);
+      api.success(`推荐计算完成：${data.items.length} 条（${ms}ms）`);
+    } catch (err: any) {
+      api.error(err?.message || "推荐测试失败");
+    } finally {
+      setRecLoading(false);
+    }
+  }
+
   return (
     <MainLayout title="管理员后台">
       {contextHolder}
@@ -125,6 +146,11 @@ export function AdminFormDetailPage() {
               {form ? (
                 <Button loading={recLoading} onClick={openRecommendation}>
                   查看推荐
+                </Button>
+              ) : null}
+              {form ? (
+                <Button disabled={!content} loading={recLoading} onClick={testRecommendationSync}>
+                  测试推荐
                 </Button>
               ) : null}
               {form ? (
