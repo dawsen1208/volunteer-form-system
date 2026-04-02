@@ -154,6 +154,17 @@ read_admission_data <- function(file_path) {
   if (!file.exists(file_path)) {
     stop(paste("Admission file not found:", file_path))
   }
+
+  info <- file.info(file_path)
+  cache_id <- paste0(basename(file_path), "_", as.numeric(info$mtime), "_", as.numeric(info$size))
+  cache_id <- gsub("[^A-Za-z0-9_\\-\\.]", "_", cache_id)
+  cache_file <- file.path(tempdir(), paste0("admission_cache_", cache_id, ".rds"))
+  if (file.exists(cache_file)) {
+    cached <- readRDS(cache_file)
+    if (is.list(cached) && !is.null(cached$admission_df) && !is.null(cached$rank_df)) {
+      return(cached)
+    }
+  }
   
   sheets <- excel_sheets(file_path)
   
@@ -201,7 +212,6 @@ read_admission_data <- function(file_path) {
   
   admission_df <- admission_raw
   admission_df$code <- normalize_text(admission_raw[[col_code]])
-  admission_df$major_raw <- normalize_text(admission_raw[[col_major]])
   admission_df$major <- clean_major_name(admission_raw[[col_major]])
   admission_df$school <- normalize_text(admission_raw[[col_school]])
   admission_df$planCount <- safe_numeric(admission_raw[[col_plan]])
@@ -212,7 +222,6 @@ read_admission_data <- function(file_path) {
     transmute(
       code = code,
       school = school,
-      major_raw = major_raw,
       major = major,
       planCount = planCount,
       minRank = minRank,
@@ -228,10 +237,13 @@ read_admission_data <- function(file_path) {
     filter(!is.na(score), !is.na(rank)) %>%
     arrange(desc(score), rank)
   
-  list(
-    admission_df = admission_df,
-    rank_df = rank_df
-  )
+  result <- list(admission_df = admission_df, rank_df = rank_df)
+  tryCatch({
+    saveRDS(result, cache_file)
+  }, error = function(e) {
+    NULL
+  })
+  result
 }
 
 
@@ -449,29 +461,24 @@ build_result <- function(admission_df, rank_df, parsed_input) {
 
   if (!is.na(user_score)) {
     candidate_df <- candidate_df %>% filter(!is.na(minScore))
-    low <- user_score - 120
-    high <- user_score + 40
+    low <- user_score - 80
+    high <- user_score + 25
     candidate_df <- candidate_df %>% filter(minScore >= low & minScore <= high)
-    if (nrow(candidate_df) > 60000) {
-      low <- user_score - 80
-      high <- user_score + 30
-      candidate_df <- candidate_df %>% filter(minScore >= low & minScore <= high)
-    }
-    if (nrow(candidate_df) > 60000) {
+    if (nrow(candidate_df) > 30000) {
       low <- user_score - 60
-      high <- user_score + 25
+      high <- user_score + 20
       candidate_df <- candidate_df %>% filter(minScore >= low & minScore <= high)
     }
   }
 
   if (!is.na(user_rank)) {
     candidate_df <- candidate_df %>% filter(!is.na(minRank))
-    low_r <- user_rank - 50000
-    high_r <- user_rank + 50000
+    low_r <- user_rank - 30000
+    high_r <- user_rank + 30000
     candidate_df <- candidate_df %>% filter(minRank >= low_r & minRank <= high_r)
-    if (nrow(candidate_df) > 60000) {
-      low_r <- user_rank - 30000
-      high_r <- user_rank + 30000
+    if (nrow(candidate_df) > 30000) {
+      low_r <- user_rank - 20000
+      high_r <- user_rank + 20000
       candidate_df <- candidate_df %>% filter(minRank >= low_r & minRank <= high_r)
     }
   }
@@ -489,24 +496,38 @@ build_result <- function(admission_df, rank_df, parsed_input) {
     ) %>%
     arrange(desc(baseScore))
 
-  pre_n <- as.integer(max(top_n * 400, 5000))
-  if (pre_n > 20000) pre_n <- 20000L
+  pre_n <- as.integer(max(top_n * 50, 1000))
+  if (pre_n > 5000) pre_n <- 5000L
   if (nrow(base_df) > pre_n) {
     base_df <- base_df %>% slice_head(n = pre_n)
   }
 
-  if (length(major_preferences) == 0) {
+  prefs <- normalize_text(major_preferences)
+  prefs <- prefs[prefs != ""]
+  if (length(prefs) == 0) {
     base_df$majorMatchScore <- 0
   } else {
-    base_df$majorMatchScore <- sapply(base_df$major, function(m) {
-      get_major_match_score(major_preferences, m)
-    })
+    if (length(prefs) > 5) prefs <- prefs[1:5]
+    match_vec <- rep(0.0, nrow(base_df))
+    for (p in prefs) {
+      if (!nzchar(p)) next
+      match_vec <- pmax(match_vec, ifelse(grepl(p, base_df$major, fixed = TRUE), 1.0, 0.0))
+    }
+    base_df$majorMatchScore <- match_vec
   }
+
+  riskLabel <- rep("风险较高", nrow(base_df))
+  riskLabel <- ifelse(!is.na(base_df$scoreGap) & base_df$scoreGap >= -8, "冲", riskLabel)
+  riskLabel <- ifelse(!is.na(base_df$rankGap) & base_df$rankGap <= 10000, "冲", riskLabel)
+  riskLabel <- ifelse(!is.na(base_df$scoreGap) & base_df$scoreGap >= 0, "稳", riskLabel)
+  riskLabel <- ifelse(!is.na(base_df$rankGap) & base_df$rankGap <= 0, "稳", riskLabel)
+  riskLabel <- ifelse(!is.na(base_df$scoreGap) & base_df$scoreGap >= 8, "保", riskLabel)
+  riskLabel <- ifelse(!is.na(base_df$rankGap) & base_df$rankGap <= -5000, "保", riskLabel)
 
   result_df <- base_df %>%
     mutate(
-      recommendationScore = baseScore + majorMatchScore * 20,
-      riskLabel = mapply(get_risk_label, scoreGap, rankGap)
+      recommendationScore = baseScore + majorMatchScore * 10,
+      riskLabel = riskLabel
     ) %>%
     arrange(desc(recommendationScore)) %>%
     slice_head(n = top_n)
