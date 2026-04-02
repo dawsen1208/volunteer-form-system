@@ -101,6 +101,11 @@ export function RecordsPage() {
   }, []);
 
   async function openRecommendation(form: FormRecord) {
+    if (pendingRecommendationIds.has(form._id)) {
+      api.info("推荐正在生成中，请稍后…");
+      return;
+    }
+
     const cached = readRecommendationCache(form);
     if (cached && cached.length) {
       setRecTitle(`${mapFormType(form.type)} - ${String((form.content as any)?.name ?? "")}`);
@@ -164,57 +169,6 @@ export function RecordsPage() {
     }
     return ids;
   }, [submitted, readyRecommendationIds]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function ensureStarted(f: FormRecord) {
-      const cached = readRecommendationCache(f);
-      if (cached && cached.length) {
-        setReadyRecommendationIds((prev) => new Set([...prev, f._id]));
-        return;
-      }
-      if (pendingRecommendationIds.has(f._id)) return;
-      if (failedRecommendationIds.has(f._id)) return;
-
-      setPendingRecommendationIds((prev) => new Set([...prev, f._id]));
-      try {
-        const res = await apiClient.post("/recommendations", { formId: f._id, content: f.content });
-        const data = res.data as any;
-        if (!data || data.ok !== true) throw new Error("推荐请求失败");
-        const ready = await pollRecommendationReady(f._id, 10 * 60 * 1000);
-        if (cancelled) return;
-        if (ready && ready.length) {
-          writeRecommendationCache(f, ready);
-          setReadyRecommendationIds((prev) => new Set([...prev, f._id]));
-          return;
-        }
-        throw new Error("推荐生成超时，请稍后重试");
-      } catch (err: any) {
-        if (cancelled) return;
-        api.error(err?.message || "推荐生成失败");
-        setFailedRecommendationIds((prev) => new Set([...prev, f._id]));
-      } finally {
-        if (cancelled) return;
-        setPendingRecommendationIds((prev) => {
-          const next = new Set(prev);
-          next.delete(f._id);
-          return next;
-        });
-      }
-    }
-
-    (async () => {
-      for (const f of submitted) {
-        if (cancelled) return;
-        await ensureStarted(f);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [api, failedRecommendationIds, pendingRecommendationIds, submitted]);
 
   return (
     <MainLayout title="我的提交记录">
@@ -366,15 +320,15 @@ export function RecordsPage() {
                         查看详情
                       </Button>
                       <Button
-                        loading={!cachedSubmittedIds.has(f._id) && !failedRecommendationIds.has(f._id)}
-                        disabled={!cachedSubmittedIds.has(f._id) && !failedRecommendationIds.has(f._id)}
+                        loading={pendingRecommendationIds.has(f._id)}
+                        disabled={pendingRecommendationIds.has(f._id)}
                         onClick={() => openRecommendation(f)}
                       >
                         {cachedSubmittedIds.has(f._id)
-                          ? "查看推荐（已生成）"
+                          ? "查看推荐"
                           : failedRecommendationIds.has(f._id)
                             ? "重新生成推荐"
-                            : "推荐生成中"}
+                            : "生成推荐"}
                       </Button>
                     </div>
                   </AppCard>

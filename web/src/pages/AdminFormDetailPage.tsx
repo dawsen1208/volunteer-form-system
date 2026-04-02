@@ -1,8 +1,10 @@
-import { Button, Descriptions, Popconfirm, Spin, message } from "antd";
+import { Alert, Button, Descriptions, Modal, Popconfirm, Spin, Table, message } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { deleteAdminFormById, getAdminFormById } from "../api/admin";
+import { apiClient } from "../api/client";
 import { AppCard } from "../components/AppCard";
 import { FormContentView } from "../components/FormContentView";
 import { FormSectionCard } from "../components/FormSectionCard";
@@ -24,6 +26,9 @@ export function AdminFormDetailPage() {
   const [api, contextHolder] = message.useMessage();
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<AdminFormRecord | null>(null);
+  const [recOpen, setRecOpen] = useState(false);
+  const [recLoading, setRecLoading] = useState(false);
+  const [recItems, setRecItems] = useState<any[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -44,6 +49,69 @@ export function AdminFormDetailPage() {
 
   const content = form?.content as FormContent | undefined;
 
+  const recColumns: ColumnsType<any> = [
+    { title: "代码", dataIndex: "code" },
+    { title: "学校", dataIndex: "school" },
+    { title: "专业", dataIndex: "major" },
+    { title: "计划数", dataIndex: "planCount" },
+    { title: "位次(用户)", dataIndex: "userRank" },
+    { title: "位次(最低)", dataIndex: "minRank" },
+    { title: "位次差", dataIndex: "rankGap" },
+    { title: "分数(用户)", dataIndex: "userScore" },
+    { title: "分数(最低)", dataIndex: "minScore" },
+    { title: "分差", dataIndex: "scoreGap" },
+    { title: "专业匹配", dataIndex: "majorMatchScore" },
+    { title: "推荐分", dataIndex: "recommendationScore" },
+    { title: "风险", dataIndex: "riskLabel" }
+  ];
+
+  async function refreshForm() {
+    if (!id) return;
+    const data = await getAdminFormById(id);
+    setForm(data);
+  }
+
+  async function startRecommendation() {
+    if (!id || !content) return;
+    try {
+      setLoading(true);
+      await apiClient.post("/recommendations", { formId: id, content });
+      api.success("已开始生成推荐，请稍后点击“查看推荐”");
+      await refreshForm();
+    } catch (err: any) {
+      api.error(err?.message || "开始生成推荐失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openRecommendation() {
+    if (!id) return;
+    try {
+      setRecLoading(true);
+      const res = await apiClient.get(`/recommendations/${id}`);
+      const data = res.data as any;
+      if (data && data.ok === true && data.status === "done" && data.result && Array.isArray(data.result.items)) {
+        setRecItems(data.result.items);
+        setRecOpen(true);
+        return;
+      }
+      if (data && data.ok === true && data.status === "pending") {
+        api.info("推荐生成中，请稍后再试");
+        return;
+      }
+      if (data && data.ok === true && data.status === "failed" && typeof data.message === "string") {
+        api.error(data.message);
+        return;
+      }
+      api.info("暂无推荐结果，请先生成推荐");
+    } catch (err: any) {
+      api.error(err?.message || "获取推荐失败");
+    } finally {
+      setRecLoading(false);
+    }
+  }
+
   return (
     <MainLayout title="管理员后台">
       {contextHolder}
@@ -54,6 +122,16 @@ export function AdminFormDetailPage() {
           extra={
             <div className="flex items-center gap-2">
               {form ? <StatusTag kind="status" value={form.status} /> : null}
+              {form ? (
+                <Button loading={recLoading} onClick={openRecommendation}>
+                  查看推荐
+                </Button>
+              ) : null}
+              {form ? (
+                <Button disabled={!content} onClick={startRecommendation}>
+                  生成推荐
+                </Button>
+              ) : null}
               {form ? (
                 <Popconfirm
                   title="确认删除该表单？"
@@ -117,6 +195,32 @@ export function AdminFormDetailPage() {
           </div>
         )}
       </div>
+
+      <Modal
+        title="推荐结果"
+        open={recOpen}
+        onCancel={() => setRecOpen(false)}
+        footer={null}
+        width={900}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          message="推荐功能声明"
+          description="本推荐功能仅用于提供志愿填报建议，不包含录取预测功能；参与分析的所有数据均为往年数据，不保证推荐学校在当年一定能录取。"
+          className="mb-3"
+        />
+        {recItems.length ? (
+          <Table
+            rowKey={(r) => r.code ?? `${r.school}-${r.major}-${Math.random()}`}
+            dataSource={recItems}
+            pagination={{ pageSize: 10 }}
+            columns={recColumns}
+          />
+        ) : (
+          <div className="text-sm text-slate-600">暂无推荐结果</div>
+        )}
+      </Modal>
     </MainLayout>
   );
 }
