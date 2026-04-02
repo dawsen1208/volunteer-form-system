@@ -23,7 +23,7 @@ const fallbackBaseURL = import.meta.env.DEV ? "http://localhost:3001/api" : unde
 
 export const apiClient = axios.create({
   baseURL: baseURL ?? fallbackBaseURL,
-  timeout: 15000
+  timeout: 120000
 });
 
 apiClient.interceptors.request.use((config) => {
