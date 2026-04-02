@@ -350,25 +350,63 @@ get_risk_label <- function(score_gap, rank_gap) {
 # ==========================================================
 
 parse_input <- function(input) {
-  form_type <- if (!is.null(input$formType)) normalize_form_type(input$formType) else "01"
+  get_field <- function(obj, key) {
+    if (is.null(obj) || !is.list(obj)) return(NULL)
+    if (is.null(names(obj))) return(NULL)
+    if (!(key %in% names(obj))) return(NULL)
+    obj[[key]]
+  }
   
-  user_score <- if (!is.null(input$score)) safe_numeric(input$score) else NA_real_
-  user_rank  <- if (!is.null(input$rank)) safe_numeric(input$rank) else NA_real_
+  raw_form_type <- get_field(input, "formType")
+  raw_type <- get_field(input, "type")
+  form_type <- if (!is.null(raw_form_type)) {
+    normalize_form_type(raw_form_type)
+  } else if (!is.null(raw_type)) {
+    if (tolower(normalize_text(raw_type)) %in% c("02", "junior", "zhuanke", "专科")) "02" else "01"
+  } else {
+    "01"
+  }
+  
+  raw_score <- get_field(input, "score")
+  raw_rank <- get_field(input, "rank")
+  scores_obj <- get_field(input, "scores")
+  if (is.null(raw_score) && !is.null(scores_obj) && is.list(scores_obj)) {
+    raw_score <- get_field(scores_obj, "totalScore")
+  }
+  if (is.null(raw_rank) && !is.null(scores_obj) && is.list(scores_obj)) {
+    raw_rank <- get_field(scores_obj, "rank")
+  }
+  
+  user_score <- if (!is.null(raw_score)) safe_numeric(raw_score) else NA_real_
+  user_rank  <- if (!is.null(raw_rank)) safe_numeric(raw_rank) else NA_real_
   
   if (is.na(user_score) && is.na(user_rank)) {
     stop("Either score or rank is required")
   }
   
   major_preferences <- character(0)
-  if (!is.null(input$majorPreferences)) {
-    if (is.character(input$majorPreferences)) {
-      major_preferences <- normalize_text(input$majorPreferences)
+  raw_major_prefs <- get_field(input, "majorPreferences")
+  if (!is.null(raw_major_prefs)) {
+    if (is.character(raw_major_prefs)) {
+      major_preferences <- normalize_text(raw_major_prefs)
+    } else if (is.list(raw_major_prefs)) {
+      extracted <- unlist(lapply(raw_major_prefs, function(x) {
+        if (is.list(x)) {
+          v <- get_field(x, "majorName")
+          if (!is.null(v)) return(v)
+          return(x)
+        }
+        x
+      }))
+      major_preferences <- normalize_text(extracted)
     } else {
-      major_preferences <- normalize_text(unlist(input$majorPreferences))
+      major_preferences <- normalize_text(unlist(raw_major_prefs))
     }
   }
+  major_preferences <- major_preferences[major_preferences != ""]
   
-  top_n <- if (!is.null(input$topN)) validate_top_n(input$topN) else 20L
+  raw_top_n <- get_field(input, "topN")
+  top_n <- if (!is.null(raw_top_n)) validate_top_n(raw_top_n) else 20L
   
   list(
     form_type = form_type,
