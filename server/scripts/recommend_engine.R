@@ -49,10 +49,26 @@ BASE_DIR <- normalizePath(getwd(), winslash = "/", mustWork = FALSE)
 # 如果你当前先本地单独测试，可改成绝对路径，例如：
 # DATA_DIR <- "C:/Users/丁叙然/Desktop/volunteer_data/data"
 
-DATA_DIR <- file.path(BASE_DIR, "backend", "data")
+args <- commandArgs(trailingOnly = TRUE)
+get_arg <- function(flag) {
+  idx <- which(args == flag)
+  if (length(idx) == 0) return(NA_character_)
+  if (idx[1] >= length(args)) return(NA_character_)
+  args[idx[1] + 1]
+}
 
-FILE_01 <- file.path(DATA_DIR, "admission_training_data_01.xlsx")
-FILE_02 <- file.path(DATA_DIR, "admission_training_data_02.xlsx")
+INPUT_PATH <- get_arg("--input")
+DATA1_PATH <- get_arg("--data1")
+DATA2_PATH <- get_arg("--data2")
+
+DATA_DIR <- file.path(BASE_DIR, "data")
+legacy_dir <- file.path(BASE_DIR, "backend", "data")
+if (dir.exists(legacy_dir)) {
+  DATA_DIR <- legacy_dir
+}
+
+FILE_01 <- if (!is.na(DATA1_PATH) && nzchar(DATA1_PATH)) DATA1_PATH else file.path(DATA_DIR, "admission_training_data_01.xlsx")
+FILE_02 <- if (!is.na(DATA2_PATH) && nzchar(DATA2_PATH)) DATA2_PATH else file.path(DATA_DIR, "admission_training_data_02.xlsx")
 
 MAJOR_GROUPS <- list(
   "计算机" = c("计算机", "软件", "人工智能", "数据科学", "大数据", "网络工程", "信息安全",
@@ -439,11 +455,16 @@ build_result <- function(admission_df, rank_df, parsed_input) {
 # ==========================================================
 
 tryCatch({
-  stdin_con <- file("stdin")
-  input_lines <- readLines(stdin_con, warn = FALSE, encoding = "UTF-8")
-  close(stdin_con)
-  
-  input_text <- paste(input_lines, collapse = "\n")
+  input_text <- ""
+  if (!is.na(INPUT_PATH) && nzchar(INPUT_PATH) && file.exists(INPUT_PATH)) {
+    input_lines <- readLines(INPUT_PATH, warn = FALSE, encoding = "UTF-8")
+    input_text <- paste(input_lines, collapse = "\n")
+  } else {
+    stdin_con <- file("stdin")
+    input_lines <- readLines(stdin_con, warn = FALSE, encoding = "UTF-8")
+    close(stdin_con)
+    input_text <- paste(input_lines, collapse = "\n")
+  }
   
   if (nchar(trimws(input_text)) == 0) {
     stop("Empty stdin JSON input")

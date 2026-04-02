@@ -1,9 +1,11 @@
 import { AppCard } from "../../components/AppCard";
 import { FormSchemaSection } from "../../components/FormSchemaSection";
 import { MajorPreferenceTable } from "../../components/MajorPreferenceTable";
+import type { FormType } from "../../types";
 import type { SectionDef } from "../../utils/formSchema";
 
 export function FormStepTwo(props: {
+  type: FormType;
   sections: SectionDef[];
   contentSnapshot: any;
   majorCategories: readonly string[];
@@ -25,7 +27,12 @@ export function FormStepTwo(props: {
       <AppCard>
         <div className="text-sm font-semibold text-slate-900">专业意向表格</div>
         <div className="mt-2">
-          <MajorPreferenceTable categories={props.majorCategories} maxRows={20} readonly={props.readonly} />
+          <MajorPreferenceTable
+            type={props.type}
+            categories={props.majorCategories}
+            maxRows={20}
+            readonly={props.readonly}
+          />
         </div>
       </AppCard>
 
@@ -35,4 +42,3 @@ export function FormStepTwo(props: {
     </div>
   );
 }
-

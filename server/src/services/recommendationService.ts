@@ -108,6 +108,7 @@ function extractJsonObject(text: string): string {
 
 export async function recommend(content: RecommendInput): Promise<RecommendationEngineResponse> {
   const tmpFile = path.join(os.tmpdir(), `recommend_input_${Date.now()}.json`);
+  const rscriptBin = process.env.RSCRIPT_BIN ?? "Rscript";
 
   // Write input
   await fs.writeFile(tmpFile, JSON.stringify(content ?? {}, null, 2), "utf8");
@@ -131,6 +132,13 @@ export async function recommend(content: RecommendInput): Promise<Recommendation
     return parsed;
   } catch (err: any) {
     await fs.rm(tmpFile, { force: true });
+    const code = String(err?.code ?? "");
+    if (code === "ENOENT") {
+      throw new AppError(
+        500,
+        `推荐引擎执行失败：未找到 Rscript 可执行文件（spawn ${rscriptBin} ENOENT）。请在服务器运行环境安装 R，并在应用环境变量中设置 RSCRIPT_BIN 指向 Rscript 的完整路径。`
+      );
+    }
     throw new AppError(500, `推荐引擎执行失败：${err?.message || "未知错误"}`);
   }
 }

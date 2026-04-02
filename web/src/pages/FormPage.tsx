@@ -348,6 +348,7 @@ export function FormPage() {
               {step === 3 ? <FormStepOne sections={step3Sections} contentSnapshot={contentSnapshot} /> : null}
               {step === 4 ? (
                 <FormStepTwo
+                  type={effectiveType}
                   sections={step4Sections}
                   contentSnapshot={contentSnapshot}
                   majorCategories={majorCategories}

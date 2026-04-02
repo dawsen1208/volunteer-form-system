@@ -1,7 +1,11 @@
-import { Button, Form, Input, Select, Table } from "antd";
+import { Button, Form, Select, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
+import type { FormType } from "../types";
+import { findMajorCategoryByName, getMajorCatalog, isMajorInCategory } from "../utils/majorCatalog";
+
 type Props = {
+  type: FormType;
   categories: readonly string[];
   maxRows?: number;
   readonly?: boolean;
@@ -13,8 +17,28 @@ type Row = {
   majorName?: string;
 };
 
+function normalizeText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function encodeMajorValue(majorName: string, majorCategory: string) {
+  return `${majorName}@@${majorCategory}`;
+}
+
+function decodeMajorValue(value: string): { majorName: string; majorCategory: string } | undefined {
+  const raw = normalizeText(value);
+  if (!raw) return undefined;
+  const idx = raw.lastIndexOf("@@");
+  if (idx <= 0 || idx >= raw.length - 2) return undefined;
+  return {
+    majorName: raw.slice(0, idx),
+    majorCategory: raw.slice(idx + 2)
+  };
+}
+
 export function MajorPreferenceTable(props: Props) {
   const maxRows = props.maxRows ?? 20;
+  const catalog = getMajorCatalog(props.type);
 
   const columns: ColumnsType<Row> = [
     {
@@ -27,13 +51,34 @@ export function MajorPreferenceTable(props: Props) {
       title: "专业大类",
       dataIndex: "majorCategory",
       render: (_value, _record, rowIndex) => (
-        <Form.Item name={["majorPreferences", rowIndex, "majorCategory"]} className="mb-0">
-          <Select
-            placeholder="请选择"
-            options={props.categories.map((c) => ({ label: c, value: c }))}
-            allowClear
-            disabled={props.readonly}
-          />
+        <Form.Item shouldUpdate noStyle>
+          {({ getFieldValue, setFieldValue }) => {
+            const majorCategoryPath = ["majorPreferences", rowIndex, "majorCategory"];
+            const majorNamePath = ["majorPreferences", rowIndex, "majorName"];
+            const currentCategory = normalizeText(getFieldValue(majorCategoryPath));
+            const currentMajorName = normalizeText(getFieldValue(majorNamePath));
+
+            return (
+              <Form.Item name={majorCategoryPath} className="mb-0">
+                <Select
+                  placeholder="请选择"
+                  options={props.categories.map((c) => ({ label: c, value: c }))}
+                  allowClear
+                  disabled={props.readonly}
+                  onChange={(next) => {
+                    const nextCategory = normalizeText(next);
+                    if (!nextCategory) {
+                      setFieldValue(majorNamePath, "");
+                      return;
+                    }
+                    if (currentMajorName && !isMajorInCategory(props.type, nextCategory, currentMajorName)) {
+                      setFieldValue(majorNamePath, "");
+                    }
+                  }}
+                />
+              </Form.Item>
+            );
+          }}
         </Form.Item>
       )
     },
@@ -41,8 +86,75 @@ export function MajorPreferenceTable(props: Props) {
       title: "具体专业",
       dataIndex: "majorName",
       render: (_value, _record, rowIndex) => (
-        <Form.Item name={["majorPreferences", rowIndex, "majorName"]} className="mb-0">
-          <Input placeholder="请输入" disabled={props.readonly} />
+        <Form.Item shouldUpdate noStyle>
+          {({ getFieldValue, setFieldValue }) => {
+            const majorCategoryPath = ["majorPreferences", rowIndex, "majorCategory"];
+            const majorNamePath = ["majorPreferences", rowIndex, "majorName"];
+            const currentCategory = normalizeText(getFieldValue(majorCategoryPath));
+
+            const options = currentCategory
+              ? (catalog[currentCategory] ?? []).map((m) => ({ label: m, value: m }))
+              : Object.entries(catalog).flatMap(([cat, majors]) =>
+                  (majors ?? []).map((m) => ({
+                    label: `${m}（${cat}）`,
+                    value: encodeMajorValue(m, cat)
+                  }))
+                );
+
+            return (
+              <Form.Item
+                name={majorNamePath}
+                className="mb-0"
+                getValueProps={(value) => {
+                  const stored = normalizeText(value);
+                  if (!stored) return { value: undefined };
+                  if (currentCategory) return { value: stored };
+                  const cat = normalizeText(findMajorCategoryByName(props.type, stored));
+                  return cat ? { value: encodeMajorValue(stored, cat) } : { value: undefined };
+                }}
+                getValueFromEvent={(value) => {
+                  const v = normalizeText(value);
+                  if (!v) return "";
+                  if (currentCategory) return v;
+                  const decoded = decodeMajorValue(v);
+                  return decoded ? decoded.majorName : v;
+                }}
+              >
+                <Select
+                  placeholder="请选择/搜索"
+                  showSearch
+                  allowClear
+                  disabled={props.readonly}
+                  options={options}
+                  filterOption={(input, option) => {
+                    const q = normalizeText(input).toLowerCase();
+                    if (!q) return true;
+                    const label = String(option?.label ?? "").toLowerCase();
+                    return label.includes(q);
+                  }}
+                  onChange={(next) => {
+                    const v = normalizeText(next);
+                    if (!v) {
+                      return;
+                    }
+
+                    if (currentCategory) {
+                      return;
+                    }
+
+                    const decoded = decodeMajorValue(v);
+                    if (!decoded) {
+                      const cat = findMajorCategoryByName(props.type, v);
+                      if (cat) setFieldValue(majorCategoryPath, cat);
+                      return;
+                    }
+
+                    setFieldValue(majorCategoryPath, decoded.majorCategory);
+                  }}
+                />
+              </Form.Item>
+            );
+          }}
         </Form.Item>
       )
     },
