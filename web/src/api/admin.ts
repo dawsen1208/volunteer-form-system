@@ -11,3 +11,8 @@ export async function getAdminFormById(id: string) {
   const res = await apiClient.get(`/admin/forms/${id}`);
   return unwrapOk<{ form: AdminFormRecord }>(res.data).form;
 }
+
+export async function deleteAdminFormById(id: string) {
+  const res = await apiClient.delete(`/admin/forms/${id}`);
+  return unwrapOk<{ deleted: boolean }>(res.data).deleted;
+}

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 
-import { getAllForms, getFormByIdForAdmin } from "../services/adminService";
+import { deleteFormByIdForAdmin, getAllForms, getFormByIdForAdmin } from "../services/adminService";
 import { loginAdmin } from "../services/authService";
 
 export async function loginAdminController(
@@ -40,6 +40,19 @@ export async function getFormByIdForAdminController(
   try {
     const form = await getFormByIdForAdmin(req.params.id);
     res.json({ ok: true, form });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteFormByIdForAdminController(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const result = await deleteFormByIdForAdmin(req.params.id);
+    res.json({ ok: true, ...result });
   } catch (err) {
     next(err);
   }

@@ -22,3 +22,15 @@ export async function getFormByIdForAdmin(formId: string) {
   return form;
 }
 
+export async function deleteFormByIdForAdmin(formId: string) {
+  if (!mongoose.isValidObjectId(formId)) {
+    throw new AppError(400, "Invalid input");
+  }
+
+  const found = await FormModel.findById(formId).exec();
+  if (!found) {
+    throw new AppError(404, "表单不存在");
+  }
+  await FormModel.deleteOne({ _id: formId }).exec();
+  return { deleted: true };
+}

@@ -1,8 +1,8 @@
-import { Button, Descriptions, Spin, message } from "antd";
+import { Button, Descriptions, Popconfirm, Spin, message } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { getAdminFormById } from "../api/admin";
+import { deleteAdminFormById, getAdminFormById } from "../api/admin";
 import { AppCard } from "../components/AppCard";
 import { FormContentView } from "../components/FormContentView";
 import { FormSectionCard } from "../components/FormSectionCard";
@@ -54,6 +54,29 @@ export function AdminFormDetailPage() {
           extra={
             <div className="flex items-center gap-2">
               {form ? <StatusTag kind="status" value={form.status} /> : null}
+              {form ? (
+                <Popconfirm
+                  title="确认删除该表单？"
+                  description="删除后不可恢复。"
+                  okText="删除"
+                  okButtonProps={{ danger: true }}
+                  cancelText="取消"
+                  onConfirm={async () => {
+                    if (!id) return;
+                    try {
+                      setLoading(true);
+                      await deleteAdminFormById(id);
+                      api.success("已删除");
+                      navigate("/admin", { replace: true });
+                    } catch (err: any) {
+                      api.error(err?.message || "删除失败");
+                      setLoading(false);
+                    }
+                  }}
+                >
+                  <Button danger>删除表单</Button>
+                </Popconfirm>
+              ) : null}
               <Button onClick={() => navigate("/admin")}>返回列表</Button>
             </div>
           }

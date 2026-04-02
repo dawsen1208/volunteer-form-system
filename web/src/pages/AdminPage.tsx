@@ -1,9 +1,9 @@
-import { Alert, Button, Input, Select, Space, Spin, Table, message } from "antd";
+import { Alert, Button, Input, Popconfirm, Select, Space, Spin, Table, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { getAdminFormById, getAdminForms } from "../api/admin";
+import { deleteAdminFormById, getAdminFormById, getAdminForms } from "../api/admin";
 import { apiClient } from "../api/client";
 import { AppCard } from "../components/AppCard";
 import { PageHeader } from "../components/PageHeader";
@@ -310,6 +310,25 @@ export function AdminPage() {
     }
   }
 
+  async function deleteSelectedForms() {
+    const ids = selectedIds;
+    if (!ids.length) {
+      api.error("请先勾选要删除的表单");
+      return;
+    }
+    try {
+      setLoading(true);
+      await Promise.all(ids.map((id) => deleteAdminFormById(id)));
+      api.success(`已删除 ${ids.length} 条表单`);
+      setSelectedIds([]);
+      await load();
+    } catch (err: any) {
+      api.error(err?.message || "删除失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
 async function exportWord() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
@@ -365,13 +384,39 @@ async function exportPdf() {
         title: "操作",
         key: "action",
         render: (_v, record) => (
-          <Button type="link" onClick={() => navigate(`/admin/forms/${record._id}`)}>
-            查看详情
-          </Button>
+          <Space>
+            <Button type="link" onClick={() => navigate(`/admin/forms/${record._id}`)}>
+              查看详情
+            </Button>
+            <Popconfirm
+              title="确认删除该表单？"
+              description="删除后不可恢复。"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              cancelText="取消"
+              onConfirm={async () => {
+                try {
+                  setLoading(true);
+                  await deleteAdminFormById(record._id);
+                  api.success("已删除");
+                  setSelectedIds((prev) => prev.filter((id) => id !== record._id));
+                  await load();
+                } catch (err: any) {
+                  api.error(err?.message || "删除失败");
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              <Button danger type="link">
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
         )
       }
     ],
-    [navigate]
+    [api, navigate, selectedIds]
   );
 
   return (
@@ -432,6 +477,19 @@ async function exportPdf() {
               <Button type="primary" disabled={!selectedIds.length} onClick={generateRecommendations}>
                 生成推荐
               </Button>
+              <Popconfirm
+                title={`确认删除已勾选的 ${selectedIds.length} 条表单？`}
+                description="删除后不可恢复。"
+                okText="删除"
+                okButtonProps={{ danger: true }}
+                cancelText="取消"
+                onConfirm={deleteSelectedForms}
+                disabled={!selectedIds.length}
+              >
+                <Button danger disabled={!selectedIds.length}>
+                  删除表单
+                </Button>
+              </Popconfirm>
             </Space>
           </div>
           <Alert
