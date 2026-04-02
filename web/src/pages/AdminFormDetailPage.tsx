@@ -20,6 +20,22 @@ function formatTime(value: string) {
   return t.toLocaleString();
 }
 
+async function pollRecommendationReady(formId: string, maxMs: number) {
+  const started = Date.now();
+  while (Date.now() - started < maxMs) {
+    const res = await apiClient.get(`/recommendations/${formId}`);
+    const data = res.data as any;
+    if (data && data.ok === true && data.status === "done" && data.result && Array.isArray(data.result.items)) {
+      return data.result.items as any[];
+    }
+    if (data && data.ok === true && data.status === "failed" && typeof data.message === "string") {
+      throw new Error(data.message);
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  return null;
+}
+
 export function AdminFormDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -115,6 +131,7 @@ export function AdminFormDetailPage() {
   }
 
   async function testRecommendationSync() {
+    if (!id) return;
     if (!content) {
       api.error("表单内容为空，无法测试推荐");
       return;
@@ -124,17 +141,14 @@ export function AdminFormDetailPage() {
       setRecError("");
       setRecItems([]);
       setRecOpen(true);
-      api.open({ type: "loading", content: "正在计算推荐…", duration: 0, key: "rec-test" });
-      const started = Date.now();
-      const res = await apiClient.post("/recommendations", { content }, { timeout: 10 * 60 * 1000 });
-      const data = res.data as any;
-      if (!data || data.ok !== true || !Array.isArray(data.items)) {
-        throw new Error("推荐结果格式不正确");
-      }
-      const ms = Date.now() - started;
-      setRecItems(data.items);
-      setRecOpen(true);
-      api.open({ type: "success", content: `推荐计算完成：${data.items.length} 条（${ms}ms）`, key: "rec-test" });
+      api.open({ type: "loading", content: "正在生成推荐…", duration: 0, key: "rec-test" });
+
+      await apiClient.post("/recommendations", { formId: id, content });
+      const items = await pollRecommendationReady(id, 10 * 60 * 1000);
+      if (!items || !items.length) throw new Error("推荐生成超时，请稍后重试");
+
+      setRecItems(items);
+      api.open({ type: "success", content: `推荐已生成：${items.length} 条`, key: "rec-test" });
     } catch (err: any) {
       const msg = err?.message || "推荐测试失败";
       setRecError(String(msg));
