@@ -157,23 +157,33 @@ read_admission_data <- function(file_path) {
   
   sheets <- excel_sheets(file_path)
   
-  if (!("投档表" %in% sheets)) {
-    stop("Sheet '投档表' not found")
+  sheet_admission <- "\u6295\u6863\u8868"
+  sheet_rank <- "\u4e00\u5206\u4e00\u6bb5"
+  
+  if (!(sheet_admission %in% sheets)) {
+    stop(paste0("Sheet '", sheet_admission, "' not found"))
   }
   
-  if (!("一分一段" %in% sheets)) {
-    stop("Sheet '一分一段' not found")
+  if (!(sheet_rank %in% sheets)) {
+    stop(paste0("Sheet '", sheet_rank, "' not found"))
   }
   
   # 你的表结构：第一行是标题，第二行才是列名，因此 skip = 1
-  admission_df <- read_excel(file_path, sheet = "投档表", skip = 1)
+  admission_raw <- read_excel(file_path, sheet = sheet_admission, skip = 1)
   
-  required_cols <- c("代码", "专业", "院校", "投档计划数", "投档最低位次", "投档最低分数")
-  missing_cols <- setdiff(required_cols, names(admission_df))
+  col_code <- "\u4ee3\u7801"
+  col_major <- "\u4e13\u4e1a"
+  col_school <- "\u9662\u6821"
+  col_plan <- "\u6295\u6863\u8ba1\u5212\u6570"
+  col_min_rank <- "\u6295\u6863\u6700\u4f4e\u4f4d\u6b21"
+  col_min_score <- "\u6295\u6863\u6700\u4f4e\u5206\u6570"
+  
+  required_cols <- c(col_code, col_major, col_school, col_plan, col_min_rank, col_min_score)
+  missing_cols <- setdiff(required_cols, names(admission_raw))
   if (length(missing_cols) > 0) {
     stop(
       paste(
-        "Missing required columns in 投档表:",
+        "Missing required columns in admission sheet:",
         paste(missing_cols, collapse = ", ")
       )
     )
@@ -181,7 +191,7 @@ read_admission_data <- function(file_path) {
   
   rank_df <- read_excel(
     file_path,
-    sheet = "一分一段",
+    sheet = sheet_rank,
     col_names = c("score", "rank")
   )
   
@@ -189,17 +199,26 @@ read_admission_data <- function(file_path) {
     stop("Sheet '一分一段' must contain at least 2 columns")
   }
   
+  admission_df <- admission_raw
+  admission_df$code <- normalize_text(admission_raw[[col_code]])
+  admission_df$major_raw <- normalize_text(admission_raw[[col_major]])
+  admission_df$major <- clean_major_name(admission_raw[[col_major]])
+  admission_df$school <- normalize_text(admission_raw[[col_school]])
+  admission_df$planCount <- safe_numeric(admission_raw[[col_plan]])
+  admission_df$minRank <- safe_numeric(admission_raw[[col_min_rank]])
+  admission_df$minScore <- safe_numeric(admission_raw[[col_min_score]])
+  
   admission_df <- admission_df %>%
-    mutate(
-      代码 = normalize_text(代码),
-      专业_raw = normalize_text(专业),
-      专业 = clean_major_name(专业),
-      院校 = normalize_text(院校),
-      投档计划数 = safe_numeric(投档计划数),
-      投档最低位次 = safe_numeric(投档最低位次),
-      投档最低分数 = safe_numeric(投档最低分数)
+    transmute(
+      code = code,
+      school = school,
+      major_raw = major_raw,
+      major = major,
+      planCount = planCount,
+      minRank = minRank,
+      minScore = minScore
     ) %>%
-    filter(院校 != "", 专业 != "")
+    filter(school != "", major != "")
   
   rank_df <- rank_df %>%
     mutate(
@@ -382,12 +401,12 @@ build_result <- function(admission_df, rank_df, parsed_input) {
   
   result_df <- admission_df %>%
     transmute(
-      code = 代码,
-      school = 院校,
-      major = 专业,
-      planCount = 投档计划数,
-      minRank = 投档最低位次,
-      minScore = 投档最低分数
+      code = code,
+      school = school,
+      major = major,
+      planCount = planCount,
+      minRank = minRank,
+      minScore = minScore
     ) %>%
     mutate(
       userRank = user_rank,
