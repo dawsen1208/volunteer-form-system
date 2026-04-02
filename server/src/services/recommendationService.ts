@@ -3,6 +3,8 @@ import path from "path";
 import os from "os";
 import { spawn } from "child_process";
 
+import mongoose from "mongoose";
+
 import { AppError } from "../utils/errors";
 import { FormModel } from "../models/Form";
 
@@ -187,12 +189,15 @@ export async function recommend(content: RecommendInput): Promise<Recommendation
 }
 
 async function getFormForUser(formId: string, userId: string) {
+  if (!mongoose.isValidObjectId(formId)) throw new AppError(400, "Invalid input");
+  if (!mongoose.isValidObjectId(userId)) throw new AppError(401, "Unauthorized");
   const found = await FormModel.findOne({ _id: formId, userId }).exec();
   if (!found) throw new AppError(404, "表单不存在");
   return found;
 }
 
 async function getFormForAdmin(formId: string) {
+  if (!mongoose.isValidObjectId(formId)) throw new AppError(400, "Invalid input");
   const found = await FormModel.findById(formId).exec();
   if (!found) throw new AppError(404, "表单不存在");
   return found;

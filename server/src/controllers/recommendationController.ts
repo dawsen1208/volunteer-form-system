@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { AppError } from "../utils/errors";
-import { getRecommendationStatus, requestRecommendation } from "../services/recommendationService";
+import { getRecommendationStatus, recommend, requestRecommendation } from "../services/recommendationService";
 
 export async function createRecommendationController(
   req: Request,
@@ -30,12 +30,7 @@ export async function createRecommendationController(
       throw new AppError(400, "Invalid input");
     }
 
-    const result = await requestRecommendation({
-      formId: `content:${Date.now()}`,
-      role: req.user.role,
-      userId: req.user.userId,
-      contentOverride: content as Record<string, any>
-    });
+    const result = await recommend(content as Record<string, any>);
     res.json(result);
   } catch (err) {
     next(err);
