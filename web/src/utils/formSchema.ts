@@ -2,7 +2,7 @@ import type { FormContent, FormType } from "../types";
 import { juniorMajorCategories, provinces, undergradMajorCategories } from "./mapping";
 
 export type EditorKind =
-  | { type: "input"; placeholder?: string }
+  | { type: "input"; placeholder?: string; addonAfter?: string }
   | { type: "textarea"; placeholder?: string; rows?: number }
   | { type: "number"; placeholder?: string }
   | { type: "date"; placeholder?: string }
@@ -10,6 +10,7 @@ export type EditorKind =
   | { type: "select"; options: { label: string; value: any }[]; mode?: "multiple" }
   | { type: "checkbox"; label: string }
   | { type: "checkboxGroup"; options: string[] | ((content: any) => string[]) }
+  | { type: "homeAddress" }
   | {
       type: "subjectSelection";
       fixed: string[];
@@ -82,8 +83,8 @@ export function getFormSchema(type: FormType): SectionDef[] {
         },
         { name: ["ethnicity"], label: "民族", editor: { type: "input", placeholder: "请输入" } },
         { name: ["birthDate"], label: "出生日期", editor: { type: "date", placeholder: "请选择" } },
-        { name: ["height"], label: "身高", editor: { type: "input", placeholder: "例如：170cm" } },
-        { name: ["weight"], label: "体重", editor: { type: "input", placeholder: "例如：60kg" } },
+        { name: ["height"], label: "身高", editor: { type: "input", placeholder: "请输入", addonAfter: "cm" } },
+        { name: ["weight"], label: "体重", editor: { type: "input", placeholder: "请输入", addonAfter: "kg" } },
         {
           name: ["graduateStatus"],
           label: "届别",
@@ -91,7 +92,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
           editor: { type: "radio", options: [{ label: "应届", value: "应届" }, { label: "往届", value: "往届" }] }
         },
         { name: ["candidatePhone"], label: "考生电话", required: true, editor: { type: "input", placeholder: "请输入" } },
-        { name: ["homeAddress"], label: "家庭住址", span: 2, editor: { type: "input", placeholder: "请输入" } },
+        { name: ["homeAddress"], label: "家庭住址", span: 2, editor: { type: "homeAddress" } },
         { name: ["idNumber"], label: "身份证号", required: true, span: 2, editor: { type: "input", placeholder: "请输入" } },
         { name: ["examNumber"], label: "考生号", required: true, editor: { type: "input", placeholder: "请输入" } },
         { name: ["referrer"], label: "推荐人", editor: { type: "input", placeholder: "请输入，若无推荐人请填无" } }

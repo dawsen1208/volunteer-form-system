@@ -6,6 +6,167 @@ import type { FieldDef, SectionDef } from "../utils/formSchema";
 import { normalizeRequired, normalizeVisible } from "../utils/formSchema";
 import { FormSectionCard } from "./FormSectionCard";
 
+type HomeAddressValue = {
+  province?: string;
+  city?: string;
+  county?: string;
+  detail?: string;
+};
+
+const homeProvinceOptions = [
+  "北京",
+  "天津",
+  "上海",
+  "重庆",
+  "河北",
+  "山西",
+  "辽宁",
+  "吉林",
+  "黑龙江",
+  "江苏",
+  "浙江",
+  "安徽",
+  "福建",
+  "江西",
+  "山东",
+  "河南",
+  "湖北",
+  "湖南",
+  "广东",
+  "海南",
+  "四川",
+  "贵州",
+  "云南",
+  "陕西",
+  "甘肃",
+  "青海",
+  "内蒙古",
+  "广西",
+  "西藏",
+  "宁夏",
+  "新疆"
+].map((p) => {
+  const municipalities = ["北京", "天津", "上海", "重庆"];
+  const regions = ["内蒙古", "广西", "西藏", "宁夏", "新疆"];
+  if (municipalities.includes(p)) return `${p}市`;
+  if (regions.includes(p)) return `${p}自治区`;
+  return `${p}省`;
+});
+
+const shandongCities = [
+  "济南市",
+  "青岛市",
+  "淄博市",
+  "枣庄市",
+  "东营市",
+  "烟台市",
+  "潍坊市",
+  "济宁市",
+  "泰安市",
+  "威海市",
+  "日照市",
+  "临沂市",
+  "德州市",
+  "聊城市",
+  "滨州市",
+  "菏泽市"
+];
+
+const hezeCounties = ["牡丹区", "定陶区", "曹县", "单县", "成武县", "巨野县", "郓城县", "鄄城县", "东明县"];
+
+function normalizeText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function HomeAddressEditor(props: { value?: HomeAddressValue | string; onChange?: (value: HomeAddressValue) => void }) {
+  const v = props.value && typeof props.value === "object" && !Array.isArray(props.value) ? (props.value as HomeAddressValue) : {};
+  const province = normalizeText(v.province);
+  const city = normalizeText(v.city);
+  const county = normalizeText(v.county);
+  const detail = normalizeText(v.detail);
+
+  const cityOptions = province === "山东省" ? shandongCities : [];
+  const countyOptions = province === "山东省" && city === "菏泽市" ? hezeCounties : [];
+
+  function update(next: Partial<HomeAddressValue>) {
+    const nextValue: HomeAddressValue = {
+      province,
+      city,
+      county,
+      detail,
+      ...next
+    };
+
+    if (nextValue.province !== "山东省") {
+      if (nextValue.city && cityOptions.length === 0) {
+        // keep typed
+      }
+    } else {
+      if (!nextValue.city) nextValue.city = "菏泽市";
+      if (!nextValue.county) nextValue.county = "鄄城县";
+    }
+
+    if (nextValue.province !== province) {
+      if (nextValue.province !== "山东省") {
+        nextValue.city = "";
+        nextValue.county = "";
+      } else {
+        nextValue.city = "菏泽市";
+        nextValue.county = "鄄城县";
+      }
+    }
+
+    if (nextValue.city !== city) {
+      if (!(nextValue.province === "山东省" && nextValue.city === "菏泽市")) {
+        nextValue.county = "";
+      }
+    }
+
+    props.onChange?.(nextValue);
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+      <Select
+        placeholder="省"
+        options={homeProvinceOptions.map((p) => ({ label: p, value: p }))}
+        value={province || undefined}
+        showSearch
+        allowClear
+        onChange={(next) => update({ province: normalizeText(next) })}
+      />
+
+      {cityOptions.length ? (
+        <Select
+          placeholder="市"
+          options={cityOptions.map((c) => ({ label: c, value: c }))}
+          value={city || undefined}
+          showSearch
+          allowClear
+          onChange={(next) => update({ city: normalizeText(next) })}
+        />
+      ) : (
+        <Input placeholder="市" value={city} onChange={(e) => update({ city: e.target.value })} />
+      )}
+
+      {countyOptions.length ? (
+        <Select
+          placeholder="县/区"
+          options={countyOptions.map((c) => ({ label: c, value: c }))}
+          value={county || undefined}
+          showSearch
+          allowClear
+          onChange={(next) => update({ county: normalizeText(next) })}
+        />
+      ) : (
+        <Input placeholder="县/区" value={county} onChange={(e) => update({ county: e.target.value })} />
+      )}
+
+      <Input placeholder="具体地址" value={detail} onChange={(e) => update({ detail: e.target.value })} />
+    </div>
+  );
+}
+
 type SubjectSelectionEditorProps = {
   fixed: string[];
   optional: string[];
@@ -106,7 +267,7 @@ type Props = {
 
 function renderEditor(field: FieldDef) {
   const editor = field.editor;
-  if (editor.type === "input") return <Input placeholder={editor.placeholder} />;
+  if (editor.type === "input") return <Input placeholder={editor.placeholder} addonAfter={editor.addonAfter} />;
   if (editor.type === "textarea") return <Input.TextArea placeholder={editor.placeholder} rows={editor.rows ?? 3} />;
   if (editor.type === "number") return <InputNumber placeholder={editor.placeholder} className="w-full" />;
   if (editor.type === "date")
@@ -161,6 +322,10 @@ export function FormSchemaSection(props: Props) {
       field.name[0] === "intendedProvinces"
     ) {
       return <ProvinceOrderSelect options={editor.options} />;
+    }
+
+    if (editor.type === "homeAddress") {
+      return <HomeAddressEditor />;
     }
 
     return renderEditor(field);

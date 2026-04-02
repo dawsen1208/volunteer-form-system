@@ -31,6 +31,24 @@ function escapeHtml(value: string) {
 function formatTextValue(label: string, value: any) {
   if (value === undefined || value === null || value === "") return "-";
   if (label === "体检是否正常") return value === true ? "正常" : "不正常";
+  if (label === "家庭地址") {
+    if (typeof value === "string") return value || "-";
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const v = value as any;
+      const parts = [v.province, v.city, v.county, v.detail].map((x) => String(x ?? "").trim()).filter(Boolean);
+      return parts.length ? parts.join("") : "-";
+    }
+  }
+  if (label === "身高") {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "-";
+    return /[a-zA-Z\u4e00-\u9fa5]/.test(raw) ? raw : `${raw}cm`;
+  }
+  if (label === "体重") {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "-";
+    return /[a-zA-Z\u4e00-\u9fa5]/.test(raw) ? raw : `${raw}kg`;
+  }
   if (typeof value === "boolean") return value ? "是" : "否";
   if (Array.isArray(value)) return value.length ? value.join("、") : "-";
   if (typeof value === "object") return JSON.stringify(value);

@@ -14,6 +14,22 @@ function toText(field: FieldDef, value: unknown): string {
   if (value === null || value === undefined) return "-";
   const editor = field.editor;
 
+  if (field.name.length === 1 && field.name[0] === "homeAddress") {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const v = value as any;
+      const parts = [v.province, v.city, v.county, v.detail].map((x) => String(x ?? "").trim()).filter(Boolean);
+      return parts.length ? parts.join("") : "-";
+    }
+    if (typeof value === "string") return value || "-";
+  }
+
+  if (field.name.length === 1 && (field.name[0] === "height" || field.name[0] === "weight")) {
+    const raw = typeof value === "string" ? value.trim() : String(value ?? "").trim();
+    if (!raw) return "-";
+    const unit = field.name[0] === "height" ? "cm" : "kg";
+    return /[a-zA-Z\u4e00-\u9fa5]/.test(raw) ? raw : `${raw}${unit}`;
+  }
+
   if (editor.type === "radio") {
     const label = optionLabel(editor.options, value);
     return label ?? String(value);

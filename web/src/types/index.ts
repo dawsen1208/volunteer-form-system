@@ -29,6 +29,13 @@ export type MajorPreferenceItem = {
   majorName: string;
 };
 
+export type HomeAddress = {
+  province?: string;
+  city?: string;
+  county?: string;
+  detail?: string;
+};
+
 export type BodyCondition = {
   myopia?: { has?: boolean; leftDegree?: number; rightDegree?: number };
   leftHanded?: boolean;
@@ -66,7 +73,7 @@ export type BaseFormContent = {
   weight?: string;
   graduateStatus?: string;
   candidatePhone?: string;
-  homeAddress?: string;
+  homeAddress?: HomeAddress | string;
   idNumber?: string;
   examNumber?: string;
   referrer?: string;
