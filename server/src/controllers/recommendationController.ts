@@ -1,7 +1,12 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { AppError } from "../utils/errors";
-import { getRecommendationStatus, recommend, requestRecommendation } from "../services/recommendationService";
+import {
+  cancelRecommendation,
+  getRecommendationStatus,
+  recommend,
+  requestRecommendation
+} from "../services/recommendationService";
 
 export async function createRecommendationController(
   req: Request,
@@ -48,6 +53,27 @@ export async function getRecommendationStatusController(
     }
     const formId = String(req.params.formId ?? "");
     const result = await getRecommendationStatus({
+      formId,
+      role: req.user.role,
+      userId: req.user.userId
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function cancelRecommendationController(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "Unauthorized");
+    }
+    const formId = String(req.params.formId ?? "");
+    const result = await cancelRecommendation({
       formId,
       role: req.user.role,
       userId: req.user.userId

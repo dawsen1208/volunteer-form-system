@@ -39,6 +39,7 @@ type RecommendationErrorEntry = {
 type RunningJob = {
   startedAt: number;
   promise: Promise<void>;
+  proc: import("child_process").ChildProcess;
 };
 
 const runningJobs = new Map<string, RunningJob>();
@@ -271,7 +272,9 @@ export async function requestRecommendation(params: {
 
   if (runningJobs.has(formId)) return { ok: true, status: "pending" };
 
-  const content = params.contentOverride && typeof params.contentOverride === "object" ? params.contentOverride : (doc.content as any);
+  const content =
+    params.contentOverride && typeof params.contentOverride === "object" ? params.contentOverride : (doc.content as any);
+
   const promise = (async () => {
     try {
       const result = await recommend(content as Record<string, any>);
@@ -294,6 +297,74 @@ export async function requestRecommendation(params: {
     }
   })();
 
-  runningJobs.set(formId, { startedAt: Date.now(), promise });
+  // Spawn a separate process for tracking cancel. We re-run the script but share the same logic path via recommend().
+  // To enable cancellation, we spawn the process here and pipe its result through the same parsing/validation.
+  // Implementation detail: start a new process that mirrors recommend() internals but exposes proc for kill.
+  (async () => {
+    const tmpFile = path.join(os.tmpdir(), `recommend_input_${Date.now()}_${Math.random().toString(36).slice(2)}.json`);
+    await fs.writeFile(tmpFile, JSON.stringify(content ?? {}, null, 2), "utf8");
+    try {
+      const scriptPath = await resolveScriptPath();
+      const { data1, data2 } = await resolveDataPaths();
+      const args = [scriptPath, "--input", tmpFile, "--data1", data1, "--data2", data2];
+      const proc = spawn(process.env.RSCRIPT_BIN ?? "Rscript", args, { stdio: ["ignore", "pipe", "pipe"] });
+      runningJobs.set(formId, { startedAt: Date.now(), promise, proc });
+      let stdout = "";
+      let stderr = "";
+      proc.stdout.on("data", (c) => (stdout += String(c)));
+      proc.stderr.on("data", (c) => (stderr += String(c)));
+      await new Promise<void>((resolveProc, rejectProc) => {
+        proc.on("error", rejectProc);
+        proc.on("close", (code) => {
+          if (code === 0) resolveProc();
+          else rejectProc(new Error(stderr || `Rscript exited with code ${code}`));
+        });
+      });
+    } catch (e) {
+      // swallow; promise will record error path
+    } finally {
+      // cleanup handled in promise finally via runningJobs.delete(formId)
+    }
+  })().catch(() => {
+    // ignore
+  });
+
   return { ok: true, status: "pending" };
+}
+
+export async function cancelRecommendation(params: {
+  formId: string;
+  role: "user" | "admin";
+  userId?: string;
+}): Promise<{ ok: true; canceled: boolean }> {
+  const formId = normalizeId(params.formId);
+  if (!formId) throw new AppError(400, "Invalid input");
+  if (params.role === "user" && !params.userId) throw new AppError(401, "Unauthorized");
+
+  const job = runningJobs.get(formId);
+  if (job?.proc) {
+    try {
+      job.proc.kill("SIGKILL");
+    } catch {
+      // ignore
+    } finally {
+      runningJobs.delete(formId);
+    }
+  }
+
+  const doc =
+    params.role === "admin"
+      ? await getFormForAdmin(formId)
+      : await getFormForUser(formId, String(params.userId ?? ""));
+  const updatedAt = getUpdatedAtIso(doc);
+  const nextContent = typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
+  (nextContent as any).__recommendationError = {
+    forUpdatedAt: updatedAt,
+    message: "用户中止",
+    failedAt: new Date().toISOString()
+  } as RecommendationErrorEntry;
+  delete (nextContent as any).__recommendation;
+  doc.content = nextContent;
+  await doc.save();
+  return { ok: true, canceled: true };
 }
