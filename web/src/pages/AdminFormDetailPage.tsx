@@ -29,6 +29,7 @@ export function AdminFormDetailPage() {
   const [recOpen, setRecOpen] = useState(false);
   const [recLoading, setRecLoading] = useState(false);
   const [recItems, setRecItems] = useState<any[]>([]);
+  const [recError, setRecError] = useState<string>("");
 
   useEffect(() => {
     async function load() {
@@ -89,6 +90,7 @@ export function AdminFormDetailPage() {
     if (!id) return;
     try {
       setRecLoading(true);
+      setRecError("");
       const res = await apiClient.get(`/recommendations/${id}`);
       const data = res.data as any;
       if (data && data.ok === true && data.status === "done" && data.result && Array.isArray(data.result.items)) {
@@ -113,11 +115,18 @@ export function AdminFormDetailPage() {
   }
 
   async function testRecommendationSync() {
-    if (!content) return;
+    if (!content) {
+      api.error("表单内容为空，无法测试推荐");
+      return;
+    }
     try {
       setRecLoading(true);
+      setRecError("");
+      setRecItems([]);
+      setRecOpen(true);
+      api.open({ type: "loading", content: "正在计算推荐…", duration: 0, key: "rec-test" });
       const started = Date.now();
-      const res = await apiClient.post("/recommendations", { content });
+      const res = await apiClient.post("/recommendations", { content }, { timeout: 10 * 60 * 1000 });
       const data = res.data as any;
       if (!data || data.ok !== true || !Array.isArray(data.items)) {
         throw new Error("推荐结果格式不正确");
@@ -125,9 +134,11 @@ export function AdminFormDetailPage() {
       const ms = Date.now() - started;
       setRecItems(data.items);
       setRecOpen(true);
-      api.success(`推荐计算完成：${data.items.length} 条（${ms}ms）`);
+      api.open({ type: "success", content: `推荐计算完成：${data.items.length} 条（${ms}ms）`, key: "rec-test" });
     } catch (err: any) {
-      api.error(err?.message || "推荐测试失败");
+      const msg = err?.message || "推荐测试失败";
+      setRecError(String(msg));
+      api.open({ type: "error", content: String(msg), key: "rec-test" });
     } finally {
       setRecLoading(false);
     }
@@ -236,7 +247,13 @@ export function AdminFormDetailPage() {
           description="本推荐功能仅用于提供志愿填报建议，不包含录取预测功能；参与分析的所有数据均为往年数据，不保证推荐学校在当年一定能录取。"
           className="mb-3"
         />
-        {recItems.length ? (
+        {recError ? (
+          <Alert type="error" showIcon message="推荐生成失败" description={recError} />
+        ) : recLoading ? (
+          <div className="flex justify-center py-8">
+            <Spin />
+          </div>
+        ) : recItems.length ? (
           <Table
             rowKey={(r) => r.code ?? `${r.school}-${r.major}-${Math.random()}`}
             dataSource={recItems}
