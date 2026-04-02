@@ -4,6 +4,7 @@ import os from "os";
 import { spawn } from "child_process";
 
 import { AppError } from "../utils/errors";
+import { FormModel } from "../models/Form";
 
 type RecommendInput = Record<string, any>;
 
@@ -14,6 +15,48 @@ export type RecommendationEngineResponse = {
   items: Array<Record<string, any>>;
   [key: string]: any;
 };
+
+export type RecommendationStatusResponse =
+  | { ok: true; status: "done"; result: RecommendationEngineResponse }
+  | { ok: true; status: "pending" }
+  | { ok: true; status: "none" };
+
+type RecommendationCacheEntry = {
+  forUpdatedAt: string;
+  result: RecommendationEngineResponse;
+  generatedAt: string;
+};
+
+type RunningJob = {
+  startedAt: number;
+  promise: Promise<void>;
+};
+
+const runningJobs = new Map<string, RunningJob>();
+
+function normalizeId(value: unknown) {
+  const v = typeof value === "string" ? value.trim() : "";
+  return v || null;
+}
+
+function getUpdatedAtIso(doc: any): string {
+  const v = doc?.updatedAt;
+  if (!v) return "";
+  const d = v instanceof Date ? v : new Date(v);
+  const t = d.getTime();
+  if (Number.isNaN(t)) return "";
+  return d.toISOString();
+}
+
+function readRecommendationCache(formDoc: any): RecommendationCacheEntry | null {
+  const c = formDoc?.content;
+  if (!c || typeof c !== "object") return null;
+  const entry = (c as any).__recommendation;
+  if (!entry || typeof entry !== "object") return null;
+  if (typeof entry.forUpdatedAt !== "string") return null;
+  if (!entry.result || typeof entry.result !== "object") return null;
+  return entry as RecommendationCacheEntry;
+}
 
 async function pickFirstExistingPath(candidates: string[]): Promise<string | null> {
   for (const p of candidates) {
@@ -141,4 +184,77 @@ export async function recommend(content: RecommendInput): Promise<Recommendation
     }
     throw new AppError(500, `推荐引擎执行失败：${err?.message || "未知错误"}`);
   }
+}
+
+async function getFormForUser(formId: string, userId: string) {
+  const found = await FormModel.findOne({ _id: formId, userId }).exec();
+  if (!found) throw new AppError(404, "表单不存在");
+  return found;
+}
+
+async function getFormForAdmin(formId: string) {
+  const found = await FormModel.findById(formId).exec();
+  if (!found) throw new AppError(404, "表单不存在");
+  return found;
+}
+
+export async function getRecommendationStatus(params: {
+  formId: string;
+  role: "user" | "admin";
+  userId?: string;
+}): Promise<RecommendationStatusResponse> {
+  const formId = normalizeId(params.formId);
+  if (!formId) throw new AppError(400, "Invalid input");
+  const doc =
+    params.role === "admin"
+      ? await getFormForAdmin(formId)
+      : await getFormForUser(formId, String(params.userId ?? ""));
+
+  const updatedAt = getUpdatedAtIso(doc);
+  const cache = readRecommendationCache(doc);
+  if (cache && cache.forUpdatedAt === updatedAt && cache.result?.ok === true && Array.isArray(cache.result.items)) {
+    return { ok: true, status: "done", result: cache.result };
+  }
+  if (runningJobs.has(formId)) return { ok: true, status: "pending" };
+  return { ok: true, status: "none" };
+}
+
+export async function requestRecommendation(params: {
+  formId: string;
+  role: "user" | "admin";
+  userId?: string;
+  contentOverride?: Record<string, any>;
+}): Promise<RecommendationStatusResponse> {
+  const formId = normalizeId(params.formId);
+  if (!formId) throw new AppError(400, "Invalid input");
+
+  const doc =
+    params.role === "admin"
+      ? await getFormForAdmin(formId)
+      : await getFormForUser(formId, String(params.userId ?? ""));
+
+  const updatedAt = getUpdatedAtIso(doc);
+  const cache = readRecommendationCache(doc);
+  if (cache && cache.forUpdatedAt === updatedAt && cache.result?.ok === true && Array.isArray(cache.result.items)) {
+    return { ok: true, status: "done", result: cache.result };
+  }
+
+  if (runningJobs.has(formId)) return { ok: true, status: "pending" };
+
+  const content = params.contentOverride && typeof params.contentOverride === "object" ? params.contentOverride : (doc.content as any);
+  const promise = (async () => {
+    try {
+      const result = await recommend(content as Record<string, any>);
+      const entry: RecommendationCacheEntry = { forUpdatedAt: updatedAt, result, generatedAt: new Date().toISOString() };
+      const nextContent = typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
+      (nextContent as any).__recommendation = entry;
+      doc.content = nextContent;
+      await doc.save();
+    } finally {
+      runningJobs.delete(formId);
+    }
+  })();
+
+  runningJobs.set(formId, { startedAt: Date.now(), promise });
+  return { ok: true, status: "pending" };
 }

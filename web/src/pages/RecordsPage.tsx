@@ -43,6 +43,26 @@ function writeRecommendationCache(form: FormRecord, items: any[]) {
   }
 }
 
+async function pollRecommendationReady(formId: string, maxMs: number) {
+  const started = Date.now();
+  while (Date.now() - started < maxMs) {
+    try {
+      const res = await apiClient.get(`/recommendations/${formId}`);
+      const data = res.data as any;
+      if (data && data.ok === true && data.status === "done" && data.result && Array.isArray(data.result.items)) {
+        return data.result.items as any[];
+      }
+      if (data && data.ok === true && data.status === "pending") {
+        // continue
+      }
+    } catch {
+      // ignore and retry
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  return null;
+}
+
 export function RecordsPage() {
   const navigate = useNavigate();
   const [api, contextHolder] = message.useMessage();
@@ -97,17 +117,26 @@ export function RecordsPage() {
     });
 
     try {
-      const res = await apiClient.post("/recommendations", { content: form.content });
+      const res = await apiClient.post("/recommendations", { formId: form._id, content: form.content });
       const data = res.data as any;
-      if (!data || data.ok !== true || !Array.isArray(data.items)) {
-        throw new Error("推荐结果格式不正确");
+      if (!data || data.ok !== true) {
+        throw new Error("推荐请求失败");
       }
-      writeRecommendationCache(form, data.items);
+
+      const ready = await pollRecommendationReady(form._id, 10 * 60 * 1000);
       loadingModal.destroy();
-      Modal.success({
-        title: "推荐已生成",
-        content: "再次点击“查看推荐”即可查看推荐的学校与专业。"
-      });
+      if (ready && ready.length) {
+        writeRecommendationCache(form, ready);
+        Modal.success({
+          title: "推荐已生成",
+          content: "再次点击“查看推荐”即可查看推荐的学校与专业。"
+        });
+      } else {
+        Modal.info({
+          title: "推荐仍在生成中",
+          content: "模型运行时间较长，请稍后再次点击“查看推荐”。"
+        });
+      }
     } catch (err: any) {
       loadingModal.destroy();
       api.error(err?.message || "获取推荐失败");

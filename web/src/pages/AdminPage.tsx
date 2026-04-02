@@ -297,17 +297,12 @@ export function AdminPage() {
     try {
       setLoading(true);
       const details = await Promise.all(ids.map(getAdminFormById));
-      const payloads = details
-        .map((d) => d.content)
-        .filter((c) => c && typeof c === "object");
-      const results = await Promise.all(
-        payloads.map(async (content) => {
-          const res = await apiClient.post("/recommendations", { content });
-          return res.data as any;
+      await Promise.all(
+        details.map(async (d) => {
+          await apiClient.post("/recommendations", { formId: d._id, content: d.content });
         })
       );
-      const count = results.filter((r) => r && r.ok === true).length;
-      api.success(`已生成 ${count} 条推荐结果`);
+      api.success(`已开始生成 ${details.length} 条推荐结果（生成完成后可在用户端“查看推荐”查看）`);
     } catch (err: any) {
       api.error(err?.message || "生成推荐失败");
     } finally {
