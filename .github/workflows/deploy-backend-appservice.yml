@@ -1,12 +1,6 @@
-name: Deploy Backend (Azure App Service)
+name: Deploy Backend (Azure App Service - ZIP Legacy)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - server/**
-      - .github/workflows/deploy-backend-appservice.yml
   workflow_dispatch:
 
 jobs:
