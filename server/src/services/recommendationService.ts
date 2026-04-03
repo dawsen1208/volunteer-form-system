@@ -43,6 +43,7 @@ type RunningJob = {
 };
 
 const runningJobs = new Map<string, RunningJob>();
+const RECOMMEND_TIMEOUT_MS = Number(process.env.RECOMMEND_TIMEOUT_MS ?? 6 * 60 * 1000);
 
 function normalizeId(value: unknown) {
   const v = typeof value === "string" ? value.trim() : "";
@@ -130,17 +131,24 @@ async function resolveDataPaths(): Promise<{ data1: string; data2: string }> {
   return { data1, data2 };
 }
 
+function tailText(text: string, maxChars: number) {
+  const s = String(text ?? "");
+  if (s.length <= maxChars) return s;
+  return s.slice(s.length - maxChars);
+}
+
 function startRscript(params: { scriptPath: string; data1: string; data2: string; inputPath: string }) {
   const args = [params.scriptPath, "--input", params.inputPath, "--data1", params.data1, "--data2", params.data2];
   const proc = spawn(process.env.RSCRIPT_BIN ?? "Rscript", args, { stdio: ["ignore", "pipe", "pipe"] });
+  let stderr = "";
   const done = new Promise<string>((resolve, reject) => {
     let stdout = "";
-    let stderr = "";
     proc.stdout.on("data", (chunk) => {
       stdout += String(chunk);
     });
     proc.stderr.on("data", (chunk) => {
       stderr += String(chunk);
+      if (stderr.length > 20000) stderr = tailText(stderr, 20000);
     });
     proc.on("error", (err) => reject(err));
     proc.on("close", (code) => {
@@ -148,12 +156,13 @@ function startRscript(params: { scriptPath: string; data1: string; data2: string
       else reject(new Error(stderr || `Rscript exited with code ${code}`));
     });
   });
-  return { proc, done };
+  return { proc, done, getStderrTail: (maxChars = 3000) => tailText(stderr, maxChars) };
 }
 
 async function startRecommendationEngine(content: RecommendInput): Promise<{
   proc: import("child_process").ChildProcess;
   done: Promise<RecommendationEngineResponse>;
+  getStderrTail: (maxChars?: number) => string;
 }> {
   const tmpFile = path.join(os.tmpdir(), `recommend_input_${Date.now()}_${Math.random().toString(36).slice(2)}.json`);
   await fs.writeFile(tmpFile, JSON.stringify(content ?? {}, null, 2), "utf8");
@@ -162,7 +171,7 @@ async function startRecommendationEngine(content: RecommendInput): Promise<{
   try {
     const scriptPath = await resolveScriptPath();
     const { data1, data2 } = await resolveDataPaths();
-    const { proc, done } = startRscript({ scriptPath, data1, data2, inputPath: tmpFile });
+    const { proc, done, getStderrTail } = startRscript({ scriptPath, data1, data2, inputPath: tmpFile });
 
     const parsedDone = (async () => {
       try {
@@ -184,7 +193,7 @@ async function startRecommendationEngine(content: RecommendInput): Promise<{
       }
     })();
 
-    return { proc, done: parsedDone };
+    return { proc, done: parsedDone, getStderrTail };
   } catch (err: any) {
     await fs.rm(tmpFile, { force: true });
     const code = String(err?.code ?? "");
@@ -287,10 +296,43 @@ export async function requestRecommendation(params: {
     params.contentOverride && typeof params.contentOverride === "object" ? params.contentOverride : (doc.content as any);
 
   const engine = await startRecommendationEngine(content as Record<string, any>);
-  runningJobs.set(formId, { startedAt: Date.now(), proc: engine.proc, canceled: false });
+  const startedAt = Date.now();
+  runningJobs.set(formId, { startedAt, proc: engine.proc, canceled: false });
+
+  let settled = false;
+
+  const timeoutTimer = setTimeout(() => {
+    const job = runningJobs.get(formId);
+    if (!job || job.canceled || settled) return;
+    const tail = engine.getStderrTail(2500);
+    const msg = `推荐生成超时（${RECOMMEND_TIMEOUT_MS}ms）` + (tail ? `\n\nRscript stderr (tail):\n${tail}` : "");
+    settled = true;
+    try {
+      job.proc.kill("SIGKILL");
+    } catch {
+      // ignore
+    }
+    const entry: RecommendationErrorEntry = { forUpdatedAt: updatedAt, message: msg, failedAt: new Date().toISOString() };
+    const nextContent =
+      typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
+    (nextContent as any).__recommendationError = entry;
+    delete (nextContent as any).__recommendation;
+    doc.content = nextContent;
+    doc
+      .save()
+      .catch(() => {
+        // ignore
+      })
+      .finally(() => {
+        runningJobs.delete(formId);
+      });
+  }, RECOMMEND_TIMEOUT_MS);
 
   engine.done
     .then(async (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
       const job = runningJobs.get(formId);
       if (job?.canceled) return;
       const entry: RecommendationCacheEntry = { forUpdatedAt: updatedAt, result, generatedAt: new Date().toISOString() };
@@ -302,9 +344,14 @@ export async function requestRecommendation(params: {
       await doc.save();
     })
     .catch(async (err: any) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
       const job = runningJobs.get(formId);
       if (job?.canceled) return;
-      const message = String(err?.message || "推荐生成失败");
+      const tail = engine.getStderrTail(2500);
+      const baseMsg = String(err?.message || "推荐生成失败");
+      const message = tail ? `${baseMsg}\n\nRscript stderr (tail):\n${tail}` : baseMsg;
       const entry: RecommendationErrorEntry = { forUpdatedAt: updatedAt, message, failedAt: new Date().toISOString() };
       const nextContent =
         typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
@@ -314,6 +361,7 @@ export async function requestRecommendation(params: {
       await doc.save();
     })
     .finally(() => {
+      clearTimeout(timeoutTimer);
       runningJobs.delete(formId);
     });
 
