@@ -493,6 +493,16 @@ build_result <- function(admission_df, rank_df, parsed_input) {
     }
   }
 
+  pre_n <- as.integer(max(top_n * 30, 600))
+  if (pre_n > 3000) pre_n <- 3000L
+
+  if (nrow(candidate_df) > pre_n) {
+    seed_val <- as.integer((ifelse(is.na(user_score), 0, user_score) + ifelse(is.na(user_rank), 0, user_rank)) %% 100000)
+    set.seed(seed_val)
+    idx <- sample.int(nrow(candidate_df), pre_n)
+    candidate_df <- candidate_df[idx, , drop = FALSE]
+  }
+
   base_df <- candidate_df %>%
     mutate(
       userRank = user_rank,
@@ -501,14 +511,7 @@ build_result <- function(admission_df, rank_df, parsed_input) {
       scoreGap = ifelse(!is.na(user_score) & !is.na(minScore), user_score - minScore, NA_real_),
       baseScore = ifelse(is.na(scoreGap), 0, scoreGap * 0.5) +
                   ifelse(is.na(planCount), 0, log1p(planCount) * 1.5)
-    ) %>%
-    arrange(desc(baseScore))
-
-  pre_n <- as.integer(max(top_n * 30, 600))
-  if (pre_n > 3000) pre_n <- 3000L
-  if (nrow(base_df) > pre_n) {
-    base_df <- base_df %>% slice_head(n = pre_n)
-  }
+    )
 
   prefs <- normalize_text(major_preferences)
   prefs <- prefs[prefs != ""]

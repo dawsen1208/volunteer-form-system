@@ -55,20 +55,22 @@ if (length(missing_cols) > 0) {
   stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
 }
 
-admission_df <- tibble(
+admission_df <- data.frame(
   code = normalize_text(admission_raw[[col_code]]),
   school = normalize_text(admission_raw[[col_school]]),
   major = clean_major_name(admission_raw[[col_major]]),
   planCount = safe_numeric(admission_raw[[col_plan]]),
   minRank = safe_numeric(admission_raw[[col_min_rank]]),
-  minScore = safe_numeric(admission_raw[[col_min_score]])
-) %>% filter(school != "", major != "")
+  minScore = safe_numeric(admission_raw[[col_min_score]]),
+  stringsAsFactors = FALSE
+)
+admission_df <- admission_df[admission_df$school != "" & admission_df$major != "", , drop = FALSE]
 
 rank_df <- read_excel(input_xlsx, sheet = sheet_rank, col_names = c("score", "rank"))
-rank_df <- rank_df %>%
-  transmute(score = safe_numeric(score), rank = safe_numeric(rank)) %>%
-  filter(!is.na(score), !is.na(rank)) %>%
-  arrange(desc(score), rank)
+rank_df$score <- safe_numeric(rank_df$score)
+rank_df$rank <- safe_numeric(rank_df$rank)
+rank_df <- rank_df[!is.na(rank_df$score) & !is.na(rank_df$rank), , drop = FALSE]
+rank_df <- rank_df[order(-rank_df$score, rank_df$rank), , drop = FALSE]
 
 dir.create(dirname(output_rds), recursive = TRUE, showWarnings = FALSE)
 saveRDS(list(admission_df = admission_df, rank_df = rank_df), output_rds)
