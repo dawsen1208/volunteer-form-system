@@ -132,7 +132,7 @@ clean_major_name <- function(x) {
   x
 }
 
-validate_top_n <- function(x, default_value = 20L, max_value = 100L) {
+validate_top_n <- function(x, default_value = 10L, max_value = 50L) {
   v <- suppressWarnings(as.integer(x))
   if (is.na(v) || v <= 0) v <- default_value
   if (v > max_value) v <- max_value
