@@ -461,24 +461,24 @@ build_result <- function(admission_df, rank_df, parsed_input) {
 
   if (!is.na(user_score)) {
     candidate_df <- candidate_df %>% filter(!is.na(minScore))
-    low <- user_score - 80
-    high <- user_score + 25
+    low <- user_score - 30
+    high <- user_score + 15
     candidate_df <- candidate_df %>% filter(minScore >= low & minScore <= high)
-    if (nrow(candidate_df) > 30000) {
-      low <- user_score - 60
-      high <- user_score + 20
+    if (nrow(candidate_df) > 20000) {
+      low <- user_score - 20
+      high <- user_score + 10
       candidate_df <- candidate_df %>% filter(minScore >= low & minScore <= high)
     }
   }
 
   if (!is.na(user_rank)) {
     candidate_df <- candidate_df %>% filter(!is.na(minRank))
-    low_r <- user_rank - 30000
-    high_r <- user_rank + 30000
+    low_r <- user_rank - 15000
+    high_r <- user_rank + 15000
     candidate_df <- candidate_df %>% filter(minRank >= low_r & minRank <= high_r)
-    if (nrow(candidate_df) > 30000) {
-      low_r <- user_rank - 20000
-      high_r <- user_rank + 20000
+    if (nrow(candidate_df) > 20000) {
+      low_r <- user_rank - 12000
+      high_r <- user_rank + 12000
       candidate_df <- candidate_df %>% filter(minRank >= low_r & minRank <= high_r)
     }
   }
@@ -489,15 +489,13 @@ build_result <- function(admission_df, rank_df, parsed_input) {
       userScore = user_score,
       rankGap = ifelse(!is.na(user_rank) & !is.na(minRank), user_rank - minRank, NA_real_),
       scoreGap = ifelse(!is.na(user_score) & !is.na(minScore), user_score - minScore, NA_real_),
-      baseScore =
-        ifelse(is.na(scoreGap), 0, scoreGap * 0.35) +
-        ifelse(is.na(rankGap), 0, -rankGap / 1000 * 0.35) +
-        ifelse(is.na(planCount), 0, log1p(planCount) * 2)
+      baseScore = ifelse(is.na(scoreGap), 0, scoreGap * 0.5) +
+                  ifelse(is.na(planCount), 0, log1p(planCount) * 1.5)
     ) %>%
     arrange(desc(baseScore))
 
-  pre_n <- as.integer(max(top_n * 50, 1000))
-  if (pre_n > 5000) pre_n <- 5000L
+  pre_n <- as.integer(max(top_n * 30, 600))
+  if (pre_n > 3000) pre_n <- 3000L
   if (nrow(base_df) > pre_n) {
     base_df <- base_df %>% slice_head(n = pre_n)
   }
