@@ -38,8 +38,8 @@ type RecommendationErrorEntry = {
 
 type RunningJob = {
   startedAt: number;
-  promise: Promise<void>;
   proc: import("child_process").ChildProcess;
+  canceled: boolean;
 };
 
 const runningJobs = new Map<string, RunningJob>();
@@ -130,13 +130,10 @@ async function resolveDataPaths(): Promise<{ data1: string; data2: string }> {
   return { data1, data2 };
 }
 
-async function runRscript(scriptPath: string, data1: string, data2: string, inputPath: string): Promise<string> {
-  return await new Promise<string>((resolve, reject) => {
-    const args = [scriptPath, "--input", inputPath, "--data1", data1, "--data2", data2];
-    const proc = spawn(process.env.RSCRIPT_BIN ?? "Rscript", args, {
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-
+function startRscript(params: { scriptPath: string; data1: string; data2: string; inputPath: string }) {
+  const args = [params.scriptPath, "--input", params.inputPath, "--data1", params.data1, "--data2", params.data2];
+  const proc = spawn(process.env.RSCRIPT_BIN ?? "Rscript", args, { stdio: ["ignore", "pipe", "pipe"] });
+  const done = new Promise<string>((resolve, reject) => {
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (chunk) => {
@@ -145,14 +142,60 @@ async function runRscript(scriptPath: string, data1: string, data2: string, inpu
     proc.stderr.on("data", (chunk) => {
       stderr += String(chunk);
     });
-    proc.on("error", (err) => {
-      reject(err);
-    });
+    proc.on("error", (err) => reject(err));
     proc.on("close", (code) => {
       if (code === 0) resolve(stdout);
       else reject(new Error(stderr || `Rscript exited with code ${code}`));
     });
   });
+  return { proc, done };
+}
+
+async function startRecommendationEngine(content: RecommendInput): Promise<{
+  proc: import("child_process").ChildProcess;
+  done: Promise<RecommendationEngineResponse>;
+}> {
+  const tmpFile = path.join(os.tmpdir(), `recommend_input_${Date.now()}_${Math.random().toString(36).slice(2)}.json`);
+  await fs.writeFile(tmpFile, JSON.stringify(content ?? {}, null, 2), "utf8");
+
+  const rscriptBin = process.env.RSCRIPT_BIN ?? "Rscript";
+  try {
+    const scriptPath = await resolveScriptPath();
+    const { data1, data2 } = await resolveDataPaths();
+    const { proc, done } = startRscript({ scriptPath, data1, data2, inputPath: tmpFile });
+
+    const parsedDone = (async () => {
+      try {
+        const raw = await done;
+        const jsonText = extractJsonObject(raw);
+        const parsed = JSON.parse(jsonText) as RecommendationEngineResponse;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("推荐结果不是 JSON 对象");
+        }
+        if (parsed.ok !== true) {
+          throw new Error("推荐引擎返回 ok=false");
+        }
+        if (!Array.isArray(parsed.items)) {
+          throw new Error("推荐结果格式不正确");
+        }
+        return parsed;
+      } finally {
+        await fs.rm(tmpFile, { force: true });
+      }
+    })();
+
+    return { proc, done: parsedDone };
+  } catch (err: any) {
+    await fs.rm(tmpFile, { force: true });
+    const code = String(err?.code ?? "");
+    if (code === "ENOENT") {
+      throw new AppError(
+        500,
+        `推荐引擎执行失败：未找到 Rscript 可执行文件（spawn ${rscriptBin} ENOENT）。请在服务器运行环境安装 R，并在应用环境变量中设置 RSCRIPT_BIN 指向 Rscript 的完整路径。`
+      );
+    }
+    throw new AppError(500, `推荐引擎执行失败：${err?.message || "未知错误"}`);
+  }
 }
 
 function extractJsonObject(text: string): string {
@@ -170,40 +213,8 @@ function extractJsonObject(text: string): string {
 }
 
 export async function recommend(content: RecommendInput): Promise<RecommendationEngineResponse> {
-  const tmpFile = path.join(os.tmpdir(), `recommend_input_${Date.now()}.json`);
-  const rscriptBin = process.env.RSCRIPT_BIN ?? "Rscript";
-
-  // Write input
-  await fs.writeFile(tmpFile, JSON.stringify(content ?? {}, null, 2), "utf8");
-
-  try {
-    const scriptPath = await resolveScriptPath();
-    const { data1, data2 } = await resolveDataPaths();
-    const raw = await runRscript(scriptPath, data1, data2, tmpFile);
-    await fs.rm(tmpFile, { force: true });
-    const jsonText = extractJsonObject(raw);
-    const parsed = JSON.parse(jsonText) as RecommendationEngineResponse;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("推荐结果不是 JSON 对象");
-    }
-    if (parsed.ok !== true) {
-      throw new Error("推荐引擎返回 ok=false");
-    }
-    if (!Array.isArray(parsed.items)) {
-      throw new Error("推荐结果格式不正确");
-    }
-    return parsed;
-  } catch (err: any) {
-    await fs.rm(tmpFile, { force: true });
-    const code = String(err?.code ?? "");
-    if (code === "ENOENT") {
-      throw new AppError(
-        500,
-        `推荐引擎执行失败：未找到 Rscript 可执行文件（spawn ${rscriptBin} ENOENT）。请在服务器运行环境安装 R，并在应用环境变量中设置 RSCRIPT_BIN 指向 Rscript 的完整路径。`
-      );
-    }
-    throw new AppError(500, `推荐引擎执行失败：${err?.message || "未知错误"}`);
-  }
+  const { done } = await startRecommendationEngine(content);
+  return await done;
 }
 
 async function getFormForUser(formId: string, userId: string) {
@@ -275,59 +286,36 @@ export async function requestRecommendation(params: {
   const content =
     params.contentOverride && typeof params.contentOverride === "object" ? params.contentOverride : (doc.content as any);
 
-  const promise = (async () => {
-    try {
-      const result = await recommend(content as Record<string, any>);
+  const engine = await startRecommendationEngine(content as Record<string, any>);
+  runningJobs.set(formId, { startedAt: Date.now(), proc: engine.proc, canceled: false });
+
+  engine.done
+    .then(async (result) => {
+      const job = runningJobs.get(formId);
+      if (job?.canceled) return;
       const entry: RecommendationCacheEntry = { forUpdatedAt: updatedAt, result, generatedAt: new Date().toISOString() };
-      const nextContent = typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
+      const nextContent =
+        typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
       (nextContent as any).__recommendation = entry;
       delete (nextContent as any).__recommendationError;
       doc.content = nextContent;
       await doc.save();
-    } catch (err: any) {
+    })
+    .catch(async (err: any) => {
+      const job = runningJobs.get(formId);
+      if (job?.canceled) return;
       const message = String(err?.message || "推荐生成失败");
       const entry: RecommendationErrorEntry = { forUpdatedAt: updatedAt, message, failedAt: new Date().toISOString() };
-      const nextContent = typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
+      const nextContent =
+        typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
       (nextContent as any).__recommendationError = entry;
       delete (nextContent as any).__recommendation;
       doc.content = nextContent;
       await doc.save();
-    } finally {
+    })
+    .finally(() => {
       runningJobs.delete(formId);
-    }
-  })();
-
-  // Spawn a separate process for tracking cancel. We re-run the script but share the same logic path via recommend().
-  // To enable cancellation, we spawn the process here and pipe its result through the same parsing/validation.
-  // Implementation detail: start a new process that mirrors recommend() internals but exposes proc for kill.
-  (async () => {
-    const tmpFile = path.join(os.tmpdir(), `recommend_input_${Date.now()}_${Math.random().toString(36).slice(2)}.json`);
-    await fs.writeFile(tmpFile, JSON.stringify(content ?? {}, null, 2), "utf8");
-    try {
-      const scriptPath = await resolveScriptPath();
-      const { data1, data2 } = await resolveDataPaths();
-      const args = [scriptPath, "--input", tmpFile, "--data1", data1, "--data2", data2];
-      const proc = spawn(process.env.RSCRIPT_BIN ?? "Rscript", args, { stdio: ["ignore", "pipe", "pipe"] });
-      runningJobs.set(formId, { startedAt: Date.now(), promise, proc });
-      let stdout = "";
-      let stderr = "";
-      proc.stdout.on("data", (c) => (stdout += String(c)));
-      proc.stderr.on("data", (c) => (stderr += String(c)));
-      await new Promise<void>((resolveProc, rejectProc) => {
-        proc.on("error", rejectProc);
-        proc.on("close", (code) => {
-          if (code === 0) resolveProc();
-          else rejectProc(new Error(stderr || `Rscript exited with code ${code}`));
-        });
-      });
-    } catch (e) {
-      // swallow; promise will record error path
-    } finally {
-      // cleanup handled in promise finally via runningJobs.delete(formId)
-    }
-  })().catch(() => {
-    // ignore
-  });
+    });
 
   return { ok: true, status: "pending" };
 }
@@ -344,6 +332,7 @@ export async function cancelRecommendation(params: {
   const job = runningJobs.get(formId);
   if (job?.proc) {
     try {
+      job.canceled = true;
       job.proc.kill("SIGKILL");
     } catch {
       // ignore

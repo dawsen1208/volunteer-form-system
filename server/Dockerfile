@@ -22,5 +22,7 @@ RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY server/scripts ./scripts
 COPY server/data ./data
+RUN Rscript /app/scripts/preprocess_admission_data.R /app/data/admission_training_data_01.xlsx /app/data/admission_training_data_01.rds \
+  && Rscript /app/scripts/preprocess_admission_data.R /app/data/admission_training_data_02.xlsx /app/data/admission_training_data_02.rds
 EXPOSE 3001
 CMD ["node", "dist/index.js"]

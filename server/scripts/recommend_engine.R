@@ -155,6 +155,16 @@ read_admission_data <- function(file_path) {
     stop(paste("Admission file not found:", file_path))
   }
 
+  if (grepl("\\.xlsx$", file_path, ignore.case = TRUE)) {
+    rds_path <- sub("\\.xlsx$", ".rds", file_path, ignore.case = TRUE)
+    if (file.exists(rds_path)) {
+      cached <- readRDS(rds_path)
+      if (is.list(cached) && !is.null(cached$admission_df) && !is.null(cached$rank_df)) {
+        return(cached)
+      }
+    }
+  }
+
   info <- file.info(file_path)
   cache_id <- paste0(basename(file_path), "_", as.numeric(info$mtime), "_", as.numeric(info$size))
   cache_id <- gsub("[^A-Za-z0-9_\\-\\.]", "_", cache_id)
