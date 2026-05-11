@@ -2,6 +2,7 @@ import { Alert, Button, Input, Popconfirm, QRCode, Select, Space, Spin, Table, m
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { useNavigate } from "react-router-dom";
 
 import { deleteAdminFormById, getAdminFormById, getAdminForms } from "../api/admin";
@@ -52,16 +53,43 @@ async function generateQrPngDataUrl(value: string, size: number): Promise<string
   document.body.appendChild(host);
 
   const root = createRoot(host);
-  root.render(<QRCode value={value} size={size} type="canvas" />);
+  const waitFrames = async (maxFrames: number) => {
+    for (let i = 0; i < maxFrames; i++) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const canvas = host.querySelector("canvas") as HTMLCanvasElement | null;
+      const svg = host.querySelector("svg") as SVGElement | null;
+      if (canvas || svg) return { canvas, svg };
+    }
+    return { canvas: null as HTMLCanvasElement | null, svg: null as SVGElement | null };
+  };
 
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const toSvgDataUrl = (svgEl: SVGElement) => {
+    const svgText = svgEl.outerHTML;
+    const encoded = encodeURIComponent(svgText)
+      .replace(/%0A/g, "")
+      .replace(/%0D/g, "")
+      .replace(/%09/g, "");
+    return `data:image/svg+xml;charset=utf-8,${encoded}`;
+  };
 
-  const canvas = host.querySelector("canvas") as HTMLCanvasElement | null;
-  const dataUrl = canvas ? canvas.toDataURL("image/png") : "";
+  try {
+    flushSync(() => {
+      root.render(<QRCode value={value} size={size} type="canvas" />);
+    });
+    const { canvas } = await waitFrames(30);
+    const dataUrl = canvas ? canvas.toDataURL("image/png") : "";
+    if (dataUrl && dataUrl.startsWith("data:image/png")) return dataUrl;
 
-  root.unmount();
-  host.remove();
-  return dataUrl;
+    flushSync(() => {
+      root.render(<QRCode value={value} size={size} type="svg" />);
+    });
+    const { svg } = await waitFrames(30);
+    if (svg) return toSvgDataUrl(svg);
+    return "";
+  } finally {
+    root.unmount();
+    host.remove();
+  }
 }
 
 async function generateQrImagesForExport(
