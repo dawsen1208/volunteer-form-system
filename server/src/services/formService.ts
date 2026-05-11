@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 import { FormModel } from "../models/Form";
+import { UserModel } from "../models/User";
 import { AppError } from "../utils/errors";
 
 export type FormType = "undergrad" | "junior";
@@ -90,8 +91,15 @@ export async function createForm(userId: string, type: FormType) {
     throw new AppError(400, "Invalid input");
   }
 
+  const user = await UserModel.findById(userId).select("resetVersion").exec();
+  if (!user) {
+    throw new AppError(401, "Unauthorized");
+  }
+  const userVersion = Number((user as any).resetVersion ?? 0) || 0;
+
   const created = await FormModel.create({
     userId: new mongoose.Types.ObjectId(userId),
+    userVersion,
     type,
     status: "draft",
     content: {}
@@ -103,7 +111,16 @@ export async function getMyForms(userId: string) {
   if (!mongoose.isValidObjectId(userId)) {
     throw new AppError(400, "Invalid input");
   }
-  return FormModel.find({ userId }).sort({ updatedAt: -1 }).exec();
+  const user = await UserModel.findById(userId).select("resetVersion").exec();
+  if (!user) {
+    throw new AppError(401, "Unauthorized");
+  }
+  const userVersion = Number((user as any).resetVersion ?? 0) || 0;
+  const query =
+    userVersion <= 0
+      ? { userId, $or: [{ userVersion: 0 }, { userVersion: { $exists: false } }] }
+      : { userId, userVersion };
+  return FormModel.find(query).sort({ updatedAt: -1 }).exec();
 }
 
 export async function getMyFormById(userId: string, formId: string) {
@@ -111,7 +128,17 @@ export async function getMyFormById(userId: string, formId: string) {
     throw new AppError(400, "Invalid input");
   }
 
-  const form = await FormModel.findOne({ _id: formId, userId }).exec();
+  const user = await UserModel.findById(userId).select("resetVersion").exec();
+  if (!user) {
+    throw new AppError(401, "Unauthorized");
+  }
+  const userVersion = Number((user as any).resetVersion ?? 0) || 0;
+  const query =
+    userVersion <= 0
+      ? { _id: formId, userId, $or: [{ userVersion: 0 }, { userVersion: { $exists: false } }] }
+      : { _id: formId, userId, userVersion };
+
+  const form = await FormModel.findOne(query).exec();
   if (!form) {
     throw new AppError(404, "表单不存在");
   }

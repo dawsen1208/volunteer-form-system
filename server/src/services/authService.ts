@@ -179,35 +179,46 @@ export async function resetPasswordAndClearFormsByPhone(params: {
   const existing = await UserModel.findOne({ phone }).exec();
   if (!existing) {
     const passwordHash = await hashPassword(newPassword);
-    await UserModel.create({ phone, passwordHash });
+    await UserModel.create({ phone, passwordHash, resetVersion: 0 });
     return { clearedCount: 0, isNew: true };
   }
 
   const passwordHash = await hashPassword(newPassword);
-  const userId = existing._id.toString();
+  const prevVersion = Number((existing as any).resetVersion ?? 0) || 0;
 
-  let clearedCount = 0;
+  const visibleQuery =
+    prevVersion <= 0
+      ? { userId: existing._id, $or: [{ userVersion: 0 }, { userVersion: { $exists: false } }] }
+      : { userId: existing._id, userVersion: prevVersion };
+
+  const clearedCount = await FormModel.countDocuments(visibleQuery).exec();
+
+  let updated = false;
   try {
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
-        await UserModel.updateOne({ _id: existing._id }, { $set: { passwordHash } }, { session }).exec();
-        const deleted = await FormModel.deleteMany({ userId: existing._id }, { session }).exec();
-        clearedCount = deleted.deletedCount ?? 0;
+        await UserModel.updateOne(
+          { _id: existing._id },
+          { $set: { passwordHash }, $inc: { resetVersion: 1 } },
+          { session }
+        ).exec();
       });
-      return { clearedCount, isNew: false };
+      updated = true;
     } finally {
       await session.endSession();
     }
   } catch (err: any) {
     const msg = String(err?.message ?? "");
-    if (!/transaction/i.test(msg)) {
-      throw err;
-    }
+    if (!/transaction/i.test(msg)) throw err;
   }
 
-  await UserModel.updateOne({ _id: existing._id }, { $set: { passwordHash } }).exec();
-  const deleted = await FormModel.deleteMany({ userId: existing._id }).exec();
-  clearedCount = deleted.deletedCount ?? 0;
+  if (!updated) {
+    await UserModel.updateOne(
+      { _id: existing._id },
+      { $set: { passwordHash }, $inc: { resetVersion: 1 } }
+    ).exec();
+  }
+
   return { clearedCount, isNew: false };
 }
