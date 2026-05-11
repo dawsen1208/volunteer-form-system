@@ -7,7 +7,7 @@ import {
   getMyForms,
   updateMyForm
 } from "../services/formService";
-import { changeUserPasswordAndClearForms } from "../services/authService";
+import { changeUserPassword } from "../services/authService";
 
 function requireUserId(req: Request): string {
   if (!req.user) {
@@ -92,7 +92,7 @@ export async function changeMyPasswordController(
     const newPassword = String(
       (req.body as { newPassword?: unknown } | undefined)?.newPassword ?? ""
     );
-    const result = await changeUserPasswordAndClearForms({
+    const result = await changeUserPassword({
       userId,
       currentPassword,
       newPassword

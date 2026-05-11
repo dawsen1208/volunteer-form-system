@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 
-import { loginUser } from "../services/authService";
+import { loginUser, resetPasswordAndClearFormsByPhone } from "../services/authService";
 
 export async function loginUserController(
   req: Request,
@@ -19,3 +19,19 @@ export async function loginUserController(
   }
 }
 
+export async function resetPasswordController(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const phone = String((req.body as { phone?: unknown } | undefined)?.phone ?? "");
+    const newPassword = String(
+      (req.body as { newPassword?: unknown } | undefined)?.newPassword ?? ""
+    );
+    const result = await resetPasswordAndClearFormsByPhone({ phone, newPassword });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}

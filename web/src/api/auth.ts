@@ -14,5 +14,10 @@ export async function loginAdmin(password: string) {
 
 export async function changeMyPassword(currentPassword: string, newPassword: string) {
   const res = await apiClient.put("/my/password", { currentPassword, newPassword });
-  return unwrapOk<{ clearedCount: number }>(res.data);
+  return unwrapOk<{ changed: true }>(res.data);
+}
+
+export async function resetPassword(phone: string, newPassword: string) {
+  const res = await apiClient.post("/auth/reset-password", { phone, newPassword });
+  return unwrapOk<{ clearedCount: number; isNew: boolean }>(res.data);
 }

@@ -1,4 +1,4 @@
-import { Alert, Button, Form, Input, Modal, message } from "antd";
+import { Button, Form, Input, Modal, message } from "antd";
 import { FileTextOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -29,8 +29,8 @@ export function ProfilePage() {
         return;
       }
       setSaving(true);
-      const result = await changeMyPassword(currentPassword, newPassword);
-      api.success(`密码已修改，已清空 ${result.clearedCount} 条填写记录`);
+      await changeMyPassword(currentPassword, newPassword);
+      api.success("密码已修改");
       setOpen(false);
       form.resetFields();
     } catch (err: any) {
@@ -110,11 +110,6 @@ export function ProfilePage() {
         destroyOnClose
       >
         <div className="space-y-3">
-          <Alert
-            type="warning"
-            showIcon
-            message="修改密码会清空该手机号下所有填写记录（草稿/已提交），不可恢复。"
-          />
           <Form layout="vertical" form={form} autoComplete="off">
             <Form.Item
               label="原密码"

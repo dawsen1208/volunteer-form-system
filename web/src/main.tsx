@@ -11,3 +11,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   </React.StrictMode>
 );
 
+requestAnimationFrame(() => {
+  document.getElementById("boot-loading")?.remove();
+});
