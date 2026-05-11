@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import {
+  changeMyPasswordController,
   deleteMyDraftController,
   getMyFormByIdController,
   getMyFormsController,
@@ -14,3 +15,4 @@ myRoutes.get("/forms", authMiddleware, getMyFormsController);
 myRoutes.get("/forms/:id", authMiddleware, getMyFormByIdController);
 myRoutes.put("/forms/:id", authMiddleware, updateMyFormController);
 myRoutes.delete("/forms/:id", authMiddleware, deleteMyDraftController);
+myRoutes.put("/password", authMiddleware, changeMyPasswordController);

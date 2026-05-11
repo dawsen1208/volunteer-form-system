@@ -7,6 +7,7 @@ import {
   getMyForms,
   updateMyForm
 } from "../services/formService";
+import { changeUserPasswordAndClearForms } from "../services/authService";
 
 function requireUserId(req: Request): string {
   if (!req.user) {
@@ -72,6 +73,30 @@ export async function deleteMyDraftController(
   try {
     const userId = requireUserId(req);
     const result = await deleteMyDraft(userId, req.params.id);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function changeMyPasswordController(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const userId = requireUserId(req);
+    const currentPassword = String(
+      (req.body as { currentPassword?: unknown } | undefined)?.currentPassword ?? ""
+    );
+    const newPassword = String(
+      (req.body as { newPassword?: unknown } | undefined)?.newPassword ?? ""
+    );
+    const result = await changeUserPasswordAndClearForms({
+      userId,
+      currentPassword,
+      newPassword
+    });
     res.json({ ok: true, ...result });
   } catch (err) {
     next(err);

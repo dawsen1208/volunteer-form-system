@@ -1,4 +1,4 @@
-import { HashRouter, Route, Routes } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AdminLoginPage } from "../pages/AdminLoginPage";
@@ -15,6 +15,7 @@ export function AppRouter() {
   return (
     <HashRouter>
       <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/admin-login" element={<AdminLoginPage />} />
 

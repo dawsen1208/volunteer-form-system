@@ -1,6 +1,7 @@
-import { Alert, Button, Input, Popconfirm, Select, Space, Spin, Table, message } from "antd";
+import { Alert, Button, Input, Popconfirm, QRCode, Select, Space, Spin, Table, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
 import { useNavigate } from "react-router-dom";
 
 import { deleteAdminFormById, getAdminFormById, getAdminForms } from "../api/admin";
@@ -26,6 +27,53 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function getPublicSiteUrl(): string {
+  const rawPublicUrl =
+    (typeof window !== "undefined" ? window.__APP_CONFIG__?.publicSiteUrl : undefined) ??
+    (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined);
+  const candidate = rawPublicUrl && rawPublicUrl.trim() ? rawPublicUrl.trim() : window.location.origin;
+  try {
+    const u = new URL(candidate);
+    return u.origin;
+  } catch {
+    return candidate.split("#")[0].replace(/\/+$/, "");
+  }
+}
+
+async function generateQrPngDataUrl(value: string, size: number): Promise<string> {
+  const host = document.createElement("div");
+  host.style.position = "fixed";
+  host.style.left = "-10000px";
+  host.style.top = "0";
+  host.style.width = `${size}px`;
+  host.style.height = `${size}px`;
+  document.body.appendChild(host);
+
+  const root = createRoot(host);
+  root.render(<QRCode value={value} size={size} type="canvas" />);
+
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  const canvas = host.querySelector("canvas") as HTMLCanvasElement | null;
+  const dataUrl = canvas ? canvas.toDataURL("image/png") : "";
+
+  root.unmount();
+  host.remove();
+  return dataUrl;
+}
+
+async function generateQrImagesForExport(
+  forms: AdminFormRecord[],
+  publicUrl: string
+): Promise<Record<string, string>> {
+  const map: Record<string, string> = {};
+  for (const f of forms) {
+    const url = `${publicUrl}/#/form/${f.type}?id=${f._id}`;
+    map[f._id] = await generateQrPngDataUrl(url, 120);
+  }
+  return map;
 }
 
 function formatTextValue(label: string, value: any) {
@@ -68,21 +116,33 @@ function getScoreFieldName(subject: string) {
   return null;
 }
 
-function buildExportHtml(forms: AdminFormRecord[], docTitle?: string) {
+function buildExportHtml(
+  forms: AdminFormRecord[],
+  docTitle?: string,
+  opts?: { publicUrl?: string; qrImages?: Record<string, string> }
+) {
+  const publicUrl = (opts?.publicUrl ?? "").replace(/\/+$/, "");
+  const qrImages = opts?.qrImages ?? {};
   const css = `
-    @page { size: A4; margin: 16mm; }
+    @page { size: A4; margin: 10mm; }
     body { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; color: #111; }
     .page { page-break-after: always; }
     .page:last-child { page-break-after: auto; }
-    h1 { font-size: 22px; margin: 0 0 10px; text-align: center; letter-spacing: 2px; }
-    .meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; margin: 0 0 10px; }
+    h1 { font-size: 18px; margin: 0; text-align: center; letter-spacing: 1px; line-height: 1.2; }
+    .header { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; margin: 0 0 6px; }
+    .header-left { flex: 1; min-width: 0; }
+    .header-right { width: 130px; text-align: right; }
+    .qr { width: 120px; height: 120px; display: inline-block; }
+    .qr-label { font-size: 10px; color: #333; margin: 0 0 4px; }
+    .qr-url { font-size: 9px; color: #666; word-break: break-all; line-height: 1.2; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; margin: 4px 0 0; }
     .meta .item { white-space: nowrap; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    td, th { border: 1px solid #333; padding: 6px 6px; font-size: 12px; vertical-align: top; }
+    td, th { border: 1px solid #333; padding: 3px 4px; font-size: 10.5px; vertical-align: top; line-height: 1.25; }
     th { background: #f3f4f6; font-weight: 600; }
-    .label { width: 14%; background: #fafafa; font-weight: 600; }
-    .value { width: 19%; }
-    .section-title { font-size: 14px; font-weight: 700; margin: 14px 0 6px; }
+    .label { width: 12%; background: #fafafa; font-weight: 600; }
+    .value { width: 21%; }
+    .section-title { font-size: 12px; font-weight: 700; margin: 8px 0 4px; }
     .muted { color: #666; }
     .line { border-bottom: 1px solid #999; min-height: 18px; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -91,20 +151,44 @@ function buildExportHtml(forms: AdminFormRecord[], docTitle?: string) {
   function pageHtml(form: AdminFormRecord) {
     const content = form.content as FormContent;
     const name = formatTextValue("姓名", (content as any)?.name);
+    const phone = form.userId?.phone ?? "-";
+    const typeText = mapFormType(form.type);
+    const statusText = form.status === "submitted" ? "已提交" : "草稿";
+    const filledAtText = form.updatedAt ? formatTime(form.updatedAt) : "-";
+    const qrUrl = publicUrl ? `${publicUrl}/#/form/${form.type}?id=${form._id}` : "";
+    const qrImg = qrImages[form._id] ?? "";
 
     const selectedSubjects: string[] = Array.isArray((content as any)?.scores?.subjectsSelected)
       ? ((content as any).scores.subjectsSelected as string[])
       : [];
 
-    const scoreRows = selectedSubjects.length
-      ? selectedSubjects
-          .map((s) => {
-            const path = getScoreFieldName(s);
-            const v = path ? getValueAtPath(content as any, path) : "";
-            return `<tr><td class="label">${escapeHtml(s)}</td><td class="value" colspan="5">${escapeHtml(formatTextValue(s, v))}</td></tr>`;
-          })
-          .join("")
-      : `<tr><td class="label">选科</td><td class="value" colspan="5">-</td></tr>`;
+    const subjectScoreItems = selectedSubjects
+      .map((s) => {
+        const path = getScoreFieldName(s);
+        const v = path ? getValueAtPath(content as any, path) : "";
+        return { subject: s, scoreText: formatTextValue(s, v) };
+      })
+      .filter((x) => x.subject);
+
+    const scoreRows = (() => {
+      if (!subjectScoreItems.length) return "";
+      const chunks: Array<Array<{ subject: string; scoreText: string }>> = [];
+      for (let i = 0; i < subjectScoreItems.length; i += 3) {
+        chunks.push(subjectScoreItems.slice(i, i + 3));
+      }
+      return chunks
+        .map((chunk) => {
+          const cells = Array.from({ length: 3 }).map((_, idx) => chunk[idx] ?? null);
+          const tds = cells
+            .map((c) => {
+              if (!c) return `<td class="label"></td><td class="value"></td>`;
+              return `<td class="label">${escapeHtml(c.subject)}</td><td class="value">${escapeHtml(c.scoreText)}</td>`;
+            })
+            .join("");
+          return `<tr>${tds}</tr>`;
+        })
+        .join("");
+    })();
 
     const provinces: string[] = Array.isArray((content as any)?.intendedProvinces) ? (content as any).intendedProvinces : [];
     const majors: any[] = Array.isArray((content as any)?.majorPreferences) ? (content as any).majorPreferences : [];
@@ -121,7 +205,23 @@ function buildExportHtml(forms: AdminFormRecord[], docTitle?: string) {
 
     return `
       <div class="page">
-        <h1>高考志愿填报约谈表</h1>
+        <div class="header">
+          <div class="header-left">
+            <h1>高考志愿填报约谈表</h1>
+            <div class="meta">
+              <div class="item">姓名：${escapeHtml(name)}</div>
+              <div class="item">手机号：${escapeHtml(String(phone))}</div>
+              <div class="item">类型：${escapeHtml(typeText)}</div>
+              <div class="item">状态：${escapeHtml(statusText)}</div>
+              <div class="item">填写时间：${escapeHtml(filledAtText)}</div>
+            </div>
+          </div>
+          <div class="header-right">
+            <div class="qr-label">扫码打开线上表单</div>
+            ${qrImg ? `<img class="qr" src="${qrImg}" />` : ""}
+            ${qrUrl ? `<div class="qr-url">${escapeHtml(qrUrl)}</div>` : ""}
+          </div>
+        </div>
 
         <div class="section-title">基础信息</div>
         <table>
@@ -347,28 +447,36 @@ export function AdminPage() {
     }
   }
 
-async function exportWord() {
+  async function exportWord() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
-  const one = list.length === 1 ? list[0] : null;
-  const typeText = one ? mapFormType(one.type) : "志愿表单";
-  const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
-  const date = new Date().toISOString().slice(0, 10);
-  const filename = `${typeText}-${nameText}-导出-${date}.doc`;
-  const html = buildExportHtml(list, filename.replace(/\.doc$/,""));
-  downloadWord(html, filename);
+    const publicUrl = getPublicSiteUrl();
+    const qrImages = await generateQrImagesForExport(list, publicUrl);
+    const one = list.length === 1 ? list[0] : null;
+    const typeText = one ? mapFormType(one.type) : "志愿表单";
+    const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
+    const date = one?.updatedAt
+      ? new Date(one.updatedAt).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+    const filename = `${typeText}-${nameText}-导出-${date}.doc`;
+    const html = buildExportHtml(list, filename.replace(/\.doc$/, ""), { publicUrl, qrImages });
+    downloadWord(html, filename);
   }
 
-async function exportPdf() {
+  async function exportPdf() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
-  const one = list.length === 1 ? list[0] : null;
-  const typeText = one ? mapFormType(one.type) : "志愿表单";
-  const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
-  const date = new Date().toISOString().slice(0, 10);
-  const title = `${typeText}-${nameText}-导出-${date}`;
-  const html = buildExportHtml(list, title);
-  printToPdf(html);
+    const publicUrl = getPublicSiteUrl();
+    const qrImages = await generateQrImagesForExport(list, publicUrl);
+    const one = list.length === 1 ? list[0] : null;
+    const typeText = one ? mapFormType(one.type) : "志愿表单";
+    const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
+    const date = one?.updatedAt
+      ? new Date(one.updatedAt).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+    const title = `${typeText}-${nameText}-导出-${date}`;
+    const html = buildExportHtml(list, title, { publicUrl, qrImages });
+    printToPdf(html);
   }
 
   const columns = useMemo<ColumnsType<AdminFormRecord>>(

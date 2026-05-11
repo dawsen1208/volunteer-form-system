@@ -427,14 +427,31 @@ parse_input <- function(input) {
   }
   major_preferences <- major_preferences[major_preferences != ""]
   
+  subjects_selected <- character(0)
+  if (!is.null(scores_obj) && is.list(scores_obj)) {
+    raw_subjects <- get_field(scores_obj, "subjectsSelected")
+    if (!is.null(raw_subjects)) {
+      if (is.character(raw_subjects)) {
+        subjects_selected <- normalize_text(raw_subjects)
+      } else if (is.list(raw_subjects)) {
+        subjects_selected <- normalize_text(unlist(raw_subjects))
+      } else {
+        subjects_selected <- normalize_text(unlist(raw_subjects))
+      }
+    }
+  }
+  subjects_selected <- subjects_selected[subjects_selected != ""]
+
   raw_top_n <- get_field(input, "topN")
-  top_n <- if (!is.null(raw_top_n)) validate_top_n(raw_top_n) else 20L
+  top_n <- if (!is.null(raw_top_n)) validate_top_n(raw_top_n, default_value = 10L) else 10L
+  top_n <- min(top_n, 10L)
   
   list(
     form_type = form_type,
     user_score = user_score,
     user_rank = user_rank,
     major_preferences = major_preferences,
+    subjects_selected = subjects_selected,
     top_n = top_n
   )
 }
@@ -449,6 +466,7 @@ build_result <- function(admission_df, rank_df, parsed_input) {
   user_score <- parsed_input$user_score
   user_rank <- parsed_input$user_rank
   major_preferences <- parsed_input$major_preferences
+  subjects_selected <- parsed_input$subjects_selected
   top_n <- parsed_input$top_n
   
   if (is.na(user_rank) && !is.na(user_score)) {
@@ -471,36 +489,38 @@ build_result <- function(admission_df, rank_df, parsed_input) {
 
   if (!is.na(user_score)) {
     candidate_df <- candidate_df %>% filter(!is.na(minScore))
-    low <- user_score - 30
-    high <- user_score + 15
+    low <- user_score - 20
+    high <- user_score + 10
     candidate_df <- candidate_df %>% filter(minScore >= low & minScore <= high)
-    if (nrow(candidate_df) > 20000) {
-      low <- user_score - 20
-      high <- user_score + 10
-      candidate_df <- candidate_df %>% filter(minScore >= low & minScore <= high)
-    }
   }
 
   if (!is.na(user_rank)) {
     candidate_df <- candidate_df %>% filter(!is.na(minRank))
-    low_r <- user_rank - 15000
-    high_r <- user_rank + 15000
+    low_r <- user_rank - 12000
+    high_r <- user_rank + 12000
     candidate_df <- candidate_df %>% filter(minRank >= low_r & minRank <= high_r)
-    if (nrow(candidate_df) > 20000) {
-      low_r <- user_rank - 12000
-      high_r <- user_rank + 12000
-      candidate_df <- candidate_df %>% filter(minRank >= low_r & minRank <= high_r)
-    }
   }
 
-  pre_n <- as.integer(max(top_n * 30, 600))
-  if (pre_n > 3000) pre_n <- 3000L
+  prefs <- normalize_text(major_preferences)
+  prefs <- prefs[prefs != ""]
+  if (length(prefs) > 6) prefs <- prefs[1:6]
 
-  if (nrow(candidate_df) > pre_n) {
-    seed_val <- as.integer((ifelse(is.na(user_score), 0, user_score) + ifelse(is.na(user_rank), 0, user_rank)) %% 100000)
-    set.seed(seed_val)
-    idx <- sample.int(nrow(candidate_df), pre_n)
-    candidate_df <- candidate_df[idx, , drop = FALSE]
+  subjects <- normalize_text(subjects_selected)
+  subjects <- subjects[subjects != ""]
+
+  subject_boost <- function(subjects, major_text) {
+    m <- normalize_text(major_text)
+    if (m == "" || length(subjects) == 0) return(0.0)
+
+    has <- function(x) any(subjects == x)
+
+    score <- 0.0
+    if (has("物理") && str_detect(m, "工程|计算机|电子|通信|电气|自动化|机械|土木|建筑|材料|能源|车辆")) score <- score + 0.15
+    if (has("化学") && str_detect(m, "化学|制药|药学|材料|环境|食品")) score <- score + 0.10
+    if (has("生物") && str_detect(m, "生物|医学|护理|药学|食品|制药")) score <- score + 0.10
+    if ((has("历史") || has("政治") || has("地理")) && str_detect(m, "法学|新闻|传播|历史|地理|政治|汉语|英语|经济|金融|管理")) score <- score + 0.08
+
+    pmin(score, 0.2)
   }
 
   base_df <- candidate_df %>%
@@ -509,63 +529,38 @@ build_result <- function(admission_df, rank_df, parsed_input) {
       userScore = user_score,
       rankGap = ifelse(!is.na(user_rank) & !is.na(minRank), user_rank - minRank, NA_real_),
       scoreGap = ifelse(!is.na(user_score) & !is.na(minScore), user_score - minScore, NA_real_),
-      baseScore = ifelse(is.na(scoreGap), 0, scoreGap * 0.5) +
-                  ifelse(is.na(planCount), 0, log1p(planCount) * 1.5)
+      majorMatchScore = sapply(major, function(mj) get_major_match_score(prefs, mj)),
+      subjectMatchScore = sapply(major, function(mj) subject_boost(subjects, mj)),
+      scoreFit = ifelse(is.na(scoreGap), 0, exp(-abs(scoreGap - 3) / 10)),
+      rankFit = ifelse(is.na(rankGap), 0, exp(-abs(rankGap) / 12000)),
+      matchScore = round(scoreFit * 0.65 + rankFit * 0.15 + majorMatchScore * 0.15 + subjectMatchScore * 0.05, 6)
     )
 
-  prefs <- normalize_text(major_preferences)
-  prefs <- prefs[prefs != ""]
-  if (length(prefs) == 0) {
-    base_df$majorMatchScore <- 0
-  } else {
-    if (length(prefs) > 5) prefs <- prefs[1:5]
-    match_vec <- rep(0.0, nrow(base_df))
-    for (p in prefs) {
-      if (!nzchar(p)) next
-      match_vec <- pmax(match_vec, ifelse(grepl(p, base_df$major, fixed = TRUE), 1.0, 0.0))
-    }
-    base_df$majorMatchScore <- match_vec
-  }
-
-  riskLabel <- rep("风险较高", nrow(base_df))
-  riskLabel <- ifelse(!is.na(base_df$scoreGap) & base_df$scoreGap >= -8, "冲", riskLabel)
-  riskLabel <- ifelse(!is.na(base_df$rankGap) & base_df$rankGap <= 10000, "冲", riskLabel)
-  riskLabel <- ifelse(!is.na(base_df$scoreGap) & base_df$scoreGap >= 0, "稳", riskLabel)
-  riskLabel <- ifelse(!is.na(base_df$rankGap) & base_df$rankGap <= 0, "稳", riskLabel)
-  riskLabel <- ifelse(!is.na(base_df$scoreGap) & base_df$scoreGap >= 8, "保", riskLabel)
-  riskLabel <- ifelse(!is.na(base_df$rankGap) & base_df$rankGap <= -5000, "保", riskLabel)
-
-  result_df <- base_df %>%
-    mutate(
-      recommendationScore = baseScore + majorMatchScore * 10,
-      riskLabel = riskLabel
-    ) %>%
-    arrange(desc(recommendationScore)) %>%
+  school_best <- base_df %>%
+    arrange(desc(matchScore), desc(majorMatchScore), desc(planCount)) %>%
+    group_by(school) %>%
+    slice_head(n = 1) %>%
+    ungroup() %>%
+    arrange(desc(matchScore)) %>%
     slice_head(n = top_n)
-  
-  items <- lapply(seq_len(nrow(result_df)), function(i) {
-    row <- result_df[i, ]
-    
+
+  items <- lapply(seq_len(nrow(school_best)), function(i) {
+    row <- school_best[i, ]
+
     list(
-      code = ifelse(is.na(row$code), NULL, as.character(row$code)),
       school = ifelse(is.na(row$school), NULL, as.character(row$school)),
       major = ifelse(is.na(row$major), NULL, as.character(row$major)),
-      planCount = ifelse(is.na(row$planCount), NULL, as.numeric(row$planCount)),
-      userRank = ifelse(is.na(row$userRank), NULL, as.numeric(row$userRank)),
-      minRank = ifelse(is.na(row$minRank), NULL, as.numeric(row$minRank)),
-      rankGap = ifelse(is.na(row$rankGap), NULL, as.numeric(row$rankGap)),
-      userScore = ifelse(is.na(row$userScore), NULL, as.numeric(row$userScore)),
       minScore = ifelse(is.na(row$minScore), NULL, as.numeric(row$minScore)),
       scoreGap = ifelse(is.na(row$scoreGap), NULL, as.numeric(row$scoreGap)),
-      majorMatchScore = ifelse(is.na(row$majorMatchScore), NULL, as.numeric(row$majorMatchScore)),
-      recommendationScore = ifelse(is.na(row$recommendationScore), NULL, round(as.numeric(row$recommendationScore), 4)),
-      riskLabel = ifelse(is.na(row$riskLabel), NULL, as.character(row$riskLabel))
+      minRank = ifelse(is.na(row$minRank), NULL, as.numeric(row$minRank)),
+      rankGap = ifelse(is.na(row$rankGap), NULL, as.numeric(row$rankGap)),
+      matchScore = ifelse(is.na(row$matchScore), NULL, as.numeric(row$matchScore))
     )
   })
   
   list(
     ok = TRUE,
-    mode = "recommendation_scoring",
+    mode = "simple_match_v1",
     formType = form_type,
     items = items
   )

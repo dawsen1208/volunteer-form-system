@@ -12,3 +12,7 @@ export async function loginAdmin(password: string) {
   return unwrapOk<LoginResponse>(res.data);
 }
 
+export async function changeMyPassword(currentPassword: string, newPassword: string) {
+  const res = await apiClient.put("/my/password", { currentPassword, newPassword });
+  return unwrapOk<{ clearedCount: number }>(res.data);
+}

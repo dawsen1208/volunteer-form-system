@@ -356,23 +356,17 @@ export function RecordsPage() {
               </div>
             ) : recItems.length ? (
               <Table
-                rowKey={(r) => r.code ?? `${r.school}-${r.major}-${Math.random()}`}
+                rowKey={(r) => r.code ?? `${r.school ?? ""}-${r.major ?? ""}`}
                 dataSource={recItems}
                 pagination={{ pageSize: 10 }}
                 columns={[
-                  { title: "代码", dataIndex: "code" },
                   { title: "学校", dataIndex: "school" },
                   { title: "专业", dataIndex: "major" },
-                  { title: "计划数", dataIndex: "planCount" },
-                  { title: "位次(用户)", dataIndex: "userRank" },
-                  { title: "位次(最低)", dataIndex: "minRank" },
-                  { title: "位次差", dataIndex: "rankGap" },
-                  { title: "分数(用户)", dataIndex: "userScore" },
-                  { title: "分数(最低)", dataIndex: "minScore" },
-                  { title: "分差", dataIndex: "scoreGap" },
-                  { title: "专业匹配", dataIndex: "majorMatchScore" },
-                  { title: "推荐分", dataIndex: "recommendationScore" },
-                  { title: "风险", dataIndex: "riskLabel" }
+                  { title: "最低分", dataIndex: "minScore" },
+                  { title: "分差(用户-最低)", dataIndex: "scoreGap" },
+                  { title: "最低位次", dataIndex: "minRank" },
+                  { title: "位次差(用户-最低)", dataIndex: "rankGap" },
+                  { title: "匹配度", dataIndex: "matchScore" }
                 ]}
               />
             ) : (

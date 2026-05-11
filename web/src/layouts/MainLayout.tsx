@@ -24,18 +24,19 @@ export function MainLayout(props: Props) {
             </div>
             {auth?.role ? <StatusTag kind="role" value={auth.role} /> : null}
           </div>
-          <Button
-            onClick={() => {
-              clearAuth();
-              navigate("/login", { replace: true });
-            }}
-          >
-            退出登录
-          </Button>
+          {auth ? (
+            <Button
+              onClick={() => {
+                clearAuth();
+                navigate("/login", { replace: true });
+              }}
+            >
+              退出登录
+            </Button>
+          ) : null}
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-6">{props.children}</main>
     </div>
   );
 }
-

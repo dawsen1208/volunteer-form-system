@@ -14,9 +14,22 @@ type Values = {
 export function LoginPage() {
   const navigate = useNavigate();
   const [api, contextHolder] = message.useMessage();
-  const rawPublicUrl = import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined;
-  const publicUrl =
-    rawPublicUrl && rawPublicUrl.trim() ? rawPublicUrl.trim() : window.location.origin;
+  const rawPublicUrl =
+    (typeof window !== "undefined" ? window.__APP_CONFIG__?.publicSiteUrl : undefined) ??
+    (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined);
+  const publicUrl = (() => {
+    const candidate = rawPublicUrl && rawPublicUrl.trim() ? rawPublicUrl.trim() : "";
+    if (candidate) {
+      try {
+        const u = new URL(candidate);
+        return u.hash ? candidate : `${u.origin}/#/login`;
+      } catch {
+        const cleaned = candidate.replace(/\/+$/, "");
+        return cleaned.includes("#") ? cleaned : `${cleaned}/#/login`;
+      }
+    }
+    return `${window.location.origin}/#/login`;
+  })();
 
   useEffect(() => {
     const auth = getAuth();

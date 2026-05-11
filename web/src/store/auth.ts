@@ -18,12 +18,24 @@ function decodeJwtPayload(token: string): any {
   }
 }
 
+function isTokenExpired(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  const exp = payload?.exp;
+  if (typeof exp !== "number") return false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  return nowSec >= exp;
+}
+
 export function getAuth() {
   const token = getToken();
   const role = getRole();
   const userId = getUserId();
   const phone = getPhone();
   if (!token || !role) return null;
+  if (isTokenExpired(token)) {
+    clearAuthStorage();
+    return null;
+  }
   return { token, role, userId: userId ?? undefined, phone: phone ?? undefined };
 }
 
@@ -39,7 +51,14 @@ export function clearAuth(): void {
 }
 
 export function isLoggedIn(): boolean {
-  return Boolean(getToken() && getRole());
+  const token = getToken();
+  const role = getRole();
+  if (!token || !role) return false;
+  if (isTokenExpired(token)) {
+    clearAuthStorage();
+    return false;
+  }
+  return true;
 }
 
 export function isAdmin(): boolean {
@@ -49,4 +68,3 @@ export function isAdmin(): boolean {
 export function isUser(): boolean {
   return getRole() === "user";
 }
-

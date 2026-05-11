@@ -1,6 +1,9 @@
 import crypto from "crypto";
 
+import mongoose from "mongoose";
+
 import { env } from "../config/env";
+import { FormModel } from "../models/Form";
 import { UserModel } from "../models/User";
 import { AppError } from "../utils/errors";
 import { signAuthToken } from "../utils/jwt";
@@ -63,4 +66,61 @@ export async function loginAdmin(params: {
 
   const token = signAuthToken({ role: "admin" });
   return { token, role: "admin" };
+}
+
+export async function changeUserPasswordAndClearForms(params: {
+  userId: string;
+  currentPassword: string;
+  newPassword: string;
+}): Promise<{ clearedCount: number }> {
+  const userId = params.userId;
+  const currentPassword = params.currentPassword;
+  const newPassword = params.newPassword;
+
+  if (!mongoose.isValidObjectId(userId)) {
+    throw new AppError(401, "Unauthorized");
+  }
+  if (!currentPassword || !newPassword) {
+    throw new AppError(400, "密码不能为空");
+  }
+  if (newPassword.length < 4) {
+    throw new AppError(400, "新密码至少 4 位");
+  }
+
+  const user = await UserModel.findById(userId).exec();
+  if (!user) {
+    throw new AppError(404, "用户不存在");
+  }
+
+  const ok = await verifyPassword(currentPassword, user.passwordHash);
+  if (!ok) {
+    throw new AppError(401, "原密码错误");
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  let clearedCount = 0;
+  try {
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await UserModel.updateOne({ _id: userId }, { $set: { passwordHash } }, { session }).exec();
+        const deleted = await FormModel.deleteMany({ userId }, { session }).exec();
+        clearedCount = deleted.deletedCount ?? 0;
+      });
+      return { clearedCount };
+    } finally {
+      await session.endSession();
+    }
+  } catch (err: any) {
+    const msg = String(err?.message ?? "");
+    if (!/transaction/i.test(msg)) {
+      throw err;
+    }
+  }
+
+  await UserModel.updateOne({ _id: userId }, { $set: { passwordHash } }).exec();
+  const deleted = await FormModel.deleteMany({ userId }).exec();
+  clearedCount = deleted.deletedCount ?? 0;
+  return { clearedCount };
 }
