@@ -197,8 +197,12 @@ export function RecordsPage() {
           const p = (d as any).progress;
           if (p && typeof p.percent === "number") setRecGenPercent(Math.max(1, Math.min(99, Number(p.percent))));
           if (p && typeof p.step === "string") setRecGenStep(p.step);
+          if (!p) setRecGenStep("脚本运行中");
         }
-        await new Promise((r) => setTimeout(r, 2000));
+        if (d && d.ok === true && d.status === "none") {
+          throw new Error("推荐任务未在运行，请重试");
+        }
+        await new Promise((r) => setTimeout(r, 1200));
       }
       throw new Error("推荐生成超时，请稍后重试");
     } catch (err: any) {

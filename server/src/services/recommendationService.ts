@@ -39,11 +39,19 @@ type RecommendationErrorEntry = {
   failedAt: string;
 };
 
+type RecommendationJobEntry = {
+  forUpdatedAt: string;
+  forKey: string;
+  startedAt: string;
+  progress: { percent: number; step?: string; updatedAt: string };
+};
+
 type RunningJob = {
   startedAt: number;
   proc: import("child_process").ChildProcess;
   canceled: boolean;
   progress?: { percent: number; step?: string; updatedAt: number };
+  lastPersistAt?: number;
 };
 
 const runningJobs = new Map<string, RunningJob>();
@@ -81,6 +89,32 @@ function readRecommendationError(formDoc: any): RecommendationErrorEntry | null 
   if (typeof entry.forUpdatedAt !== "string") return null;
   if (typeof entry.message !== "string") return null;
   return entry as RecommendationErrorEntry;
+}
+
+function readRecommendationJob(formDoc: any): RecommendationJobEntry | null {
+  const c = formDoc?.content;
+  if (!c || typeof c !== "object") return null;
+  const entry = (c as any).__recommendationJob;
+  if (!entry || typeof entry !== "object") return null;
+  if (typeof (entry as any).forUpdatedAt !== "string") return null;
+  if (typeof (entry as any).forKey !== "string") return null;
+  if (typeof (entry as any).startedAt !== "string") return null;
+  const p = (entry as any).progress;
+  if (!p || typeof p !== "object") return null;
+  if (typeof (p as any).percent !== "number") return null;
+  if (typeof (p as any).updatedAt !== "string") return null;
+  return entry as RecommendationJobEntry;
+}
+
+async function persistRecommendationJob(params: {
+  formId: string;
+  entry: RecommendationJobEntry;
+}) {
+  await FormModel.updateOne({ _id: params.formId }, { $set: { "content.__recommendationJob": params.entry } }).exec();
+}
+
+async function clearRecommendationJob(formId: string) {
+  await FormModel.updateOne({ _id: formId }, { $unset: { "content.__recommendationJob": "" } }).exec();
 }
 
 function stableStringify(value: any): string {
@@ -340,6 +374,14 @@ export async function getRecommendationStatus(params: {
     const progress = job.progress ? { percent: job.progress.percent, step: job.progress.step } : undefined;
     return { ok: true, status: "pending", progress };
   }
+  const persistedJob = readRecommendationJob(doc);
+  if (persistedJob && persistedJob.forKey === key) {
+    return {
+      ok: true,
+      status: "pending",
+      progress: { percent: persistedJob.progress.percent, step: persistedJob.progress.step }
+    };
+  }
   return { ok: true, status: "none" };
 }
 
@@ -378,17 +420,45 @@ export async function requestRecommendation(params: {
     return { ok: true, status: "failed", message: error.message };
   }
 
-  if (runningJobs.has(formId)) return { ok: true, status: "pending" };
+  const existingJob = runningJobs.get(formId);
+  if (existingJob) {
+    const progress = existingJob.progress ? { percent: existingJob.progress.percent, step: existingJob.progress.step } : undefined;
+    return { ok: true, status: "pending", progress };
+  }
 
   const engine = await startRecommendationEngine(input as Record<string, any>, {
     onProgress: (p) => {
       const job = runningJobs.get(formId);
       if (!job || job.canceled) return;
       job.progress = { percent: p.percent, step: p.step, updatedAt: Date.now() };
+      const now = Date.now();
+      const last = job.lastPersistAt ?? 0;
+      if (now - last < 1500) return;
+      job.lastPersistAt = now;
+      const entry: RecommendationJobEntry = {
+        forUpdatedAt: updatedAt,
+        forKey: key,
+        startedAt: new Date(job.startedAt).toISOString(),
+        progress: {
+          percent: p.percent,
+          step: p.step,
+          updatedAt: new Date().toISOString()
+        }
+      };
+      persistRecommendationJob({ formId, entry }).catch(() => {});
     }
   });
   const startedAt = Date.now();
   runningJobs.set(formId, { startedAt, proc: engine.proc, canceled: false, progress: { percent: 1, updatedAt: Date.now() } });
+  await persistRecommendationJob({
+    formId,
+    entry: {
+      forUpdatedAt: updatedAt,
+      forKey: key,
+      startedAt: new Date(startedAt).toISOString(),
+      progress: { percent: 1, step: "启动推荐脚本", updatedAt: new Date().toISOString() }
+    }
+  });
 
   let settled = false;
 
@@ -420,6 +490,7 @@ export async function requestRecommendation(params: {
         // ignore
       })
       .finally(() => {
+        clearRecommendationJob(formId).catch(() => {});
         runningJobs.delete(formId);
       });
   }, RECOMMEND_TIMEOUT_MS);
@@ -441,8 +512,10 @@ export async function requestRecommendation(params: {
         typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
       (nextContent as any).__recommendation = entry;
       delete (nextContent as any).__recommendationError;
+      delete (nextContent as any).__recommendationJob;
       doc.content = nextContent;
       await doc.save();
+      await clearRecommendationJob(formId);
     })
     .catch(async (err: any) => {
       if (settled) return;
@@ -463,11 +536,14 @@ export async function requestRecommendation(params: {
         typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
       (nextContent as any).__recommendationError = entry;
       delete (nextContent as any).__recommendation;
+      delete (nextContent as any).__recommendationJob;
       doc.content = nextContent;
       await doc.save();
+      await clearRecommendationJob(formId);
     })
     .finally(() => {
       clearTimeout(timeoutTimer);
+      clearRecommendationJob(formId).catch(() => {});
       runningJobs.delete(formId);
     });
 
@@ -510,7 +586,9 @@ export async function cancelRecommendation(params: {
     failedAt: new Date().toISOString()
   } as RecommendationErrorEntry;
   delete (nextContent as any).__recommendation;
+  delete (nextContent as any).__recommendationJob;
   doc.content = nextContent;
   await doc.save();
+  await clearRecommendationJob(formId);
   return { ok: true, canceled: true };
 }
