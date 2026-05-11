@@ -85,30 +85,44 @@ function generateQrPngBase64(value: string, targetSizePx: number): string {
   return base64;
 }
 
-type QrAsset = { name: string; base64: string };
+type QrAsset = { name: string; cid: string; base64: string };
+
+function wrapBase64(b64: string): string {
+  const s = String(b64 ?? "");
+  if (!s) return "";
+  const lines: string[] = [];
+  for (let i = 0; i < s.length; i += 76) {
+    lines.push(s.slice(i, i + 76));
+  }
+  return lines.join("\r\n");
+}
 
 function buildMhtmlDoc(html: string, assets: QrAsset[]): string {
   const boundary = `----=_NextPart_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+  const startCid = "main@export";
   const header =
     `MIME-Version: 1.0\r\n` +
-    `Content-Type: multipart/related; boundary="${boundary}"; type="text/html"\r\n\r\n`;
+    `Content-Type: multipart/related; boundary="${boundary}"; type="text/html"; start="<${startCid}>"\r\n\r\n`;
 
-  const htmlBase64 = toBase64Utf8(html);
+  const htmlBase64 = wrapBase64(toBase64Utf8(html));
   const htmlPart =
     `--${boundary}\r\n` +
     `Content-Type: text/html; charset="utf-8"\r\n` +
     `Content-Transfer-Encoding: base64\r\n` +
+    `Content-ID: <${startCid}>\r\n` +
     `Content-Location: file:///C:/export.html\r\n\r\n` +
     `${htmlBase64}\r\n\r\n`;
 
   const assetParts = assets
     .map((a) => {
+      const base64 = wrapBase64(a.base64);
       const content =
         `--${boundary}\r\n` +
         `Content-Type: image/png\r\n` +
         `Content-Transfer-Encoding: base64\r\n` +
+        `Content-ID: <${a.cid}>\r\n` +
         `Content-Location: ${a.name}\r\n\r\n` +
-        `${a.base64}\r\n\r\n`;
+        `${base64}\r\n\r\n`;
       return content;
     })
     .join("");
@@ -178,10 +192,11 @@ function buildExportHtml(
     .meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; margin: 4px 0 0; }
     .meta .item { white-space: nowrap; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    td, th { border: 1px solid #333; padding: 3px 4px; font-size: 10.5px; vertical-align: top; line-height: 1.25; }
+    td, th { border: 1px solid #333; padding: 3px 4px; font-size: 10.5px; vertical-align: top; line-height: 1.25; word-break: break-word; overflow-wrap: anywhere; }
     th { background: #f3f4f6; font-weight: 600; }
-    .label { width: 12%; background: #fafafa; font-weight: 600; }
-    .value { width: 21%; }
+    table.kv col.k { width: 12%; }
+    table.kv col.v { width: 21%; }
+    .label { background: #fafafa; font-weight: 600; white-space: nowrap; }
     .section-title { font-size: 12px; font-weight: 700; margin: 8px 0 4px; }
     .muted { color: #666; }
     .line { border-bottom: 1px solid #999; min-height: 18px; }
@@ -233,6 +248,14 @@ function buildExportHtml(
     const provinces: string[] = Array.isArray((content as any)?.intendedProvinces) ? (content as any).intendedProvinces : [];
     const majors: any[] = Array.isArray((content as any)?.majorPreferences) ? (content as any).majorPreferences : [];
 
+    const kvColgroup = `
+          <colgroup>
+            <col class="k" /><col class="v" />
+            <col class="k" /><col class="v" />
+            <col class="k" /><col class="v" />
+          </colgroup>
+    `;
+
     const majorRows = majors.length
       ? majors
           .map((m, idx) => {
@@ -263,7 +286,8 @@ function buildExportHtml(
         </div>
 
         <div class="section-title">基础信息</div>
-        <table>
+        <table class="kv">
+          ${kvColgroup}
           <tr>
             <td class="label">姓名</td><td class="value">${escapeHtml(name)}</td>
             <td class="label">性别</td><td class="value">${escapeHtml(formatTextValue("性别", (content as any)?.gender))}</td>
@@ -292,7 +316,8 @@ function buildExportHtml(
         </table>
 
         <div class="section-title">学业与学校信息</div>
-        <table>
+        <table class="kv">
+          ${kvColgroup}
           <tr>
             <td class="label">考试类别</td><td class="value">${escapeHtml(formatTextValue("考试类别", (content as any)?.candidateCategory))}</td>
             <td class="label">专业成绩</td><td class="value">${escapeHtml(formatTextValue("专业成绩", (content as any)?.professionalScore))}</td>
@@ -310,7 +335,8 @@ function buildExportHtml(
         </table>
 
         <div class="section-title">高考成绩</div>
-        <table>
+        <table class="kv">
+          ${kvColgroup}
           <tr>
             <td class="label">总分</td><td class="value">${escapeHtml(formatTextValue("总分", (content as any)?.scores?.totalScore))}</td>
             <td class="label">位次</td><td class="value">${escapeHtml(formatTextValue("位次", (content as any)?.scores?.rank))}</td>
@@ -320,7 +346,8 @@ function buildExportHtml(
         </table>
 
         <div class="section-title">家庭情况</div>
-        <table>
+        <table class="kv">
+          ${kvColgroup}
           <tr>
             <td class="label">父亲职业</td><td class="value">${escapeHtml(formatTextValue("父亲职业", (content as any)?.fatherOccupation))}</td>
             <td class="label">母亲职业</td><td class="value">${escapeHtml(formatTextValue("母亲职业", (content as any)?.motherOccupation))}</td>
@@ -329,7 +356,8 @@ function buildExportHtml(
         </table>
 
         <div class="section-title">志愿条件</div>
-        <table>
+        <table class="kv">
+          ${kvColgroup}
           <tr>
             <td class="label">意向省份</td><td class="value" colspan="5">${escapeHtml(formatTextValue("意向省份", provinces.map((p, idx) => `${idx + 1}.${p}`)))}</td>
           </tr>
@@ -373,7 +401,7 @@ function downloadWord(html: string, filename: string) {
 
 function downloadWordMhtml(html: string, assets: QrAsset[], filename: string) {
   const mhtml = buildMhtmlDoc(html, assets);
-  const blob = new Blob([mhtml], { type: "application/msword;charset=utf-8" });
+  const blob = new Blob([mhtml], { type: "message/rfc822" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -516,10 +544,11 @@ export function AdminPage() {
     for (const f of list) {
       const url = `${publicUrl}/#/form/${f.type}?id=${f._id}`;
       const name = `qr_${f._id}.png`;
+      const cid = `qr_${f._id}@export`;
       const base64 = generateQrPngBase64(url, 96);
       if (base64) {
-        qrSrcMap[f._id] = name;
-        assets.push({ name, base64 });
+        qrSrcMap[f._id] = `cid:${cid}`;
+        assets.push({ name, cid, base64 });
       }
     }
     const one = list.length === 1 ? list[0] : null;
@@ -528,8 +557,8 @@ export function AdminPage() {
     const date = one?.updatedAt
       ? new Date(one.updatedAt).toISOString().slice(0, 10)
       : new Date().toISOString().slice(0, 10);
-    const filename = `${typeText}-${nameText}-导出-${date}.doc`;
-    const html = buildExportHtml(list, filename.replace(/\.doc$/, ""), { publicUrl, qrSrcMap });
+    const filename = `${typeText}-${nameText}-导出-${date}.mht`;
+    const html = buildExportHtml(list, filename.replace(/\.mht$/, ""), { publicUrl, qrSrcMap });
     downloadWordMhtml(html, assets, filename);
   }
 
