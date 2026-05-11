@@ -1,5 +1,5 @@
-import { Alert, Button, Empty, Modal, Popconfirm, Select, Spin, Table, message } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { Alert, Button, Empty, Modal, Popconfirm, Progress, Select, Spin, Table, message } from "antd";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { deleteMyDraft, getMyForms } from "../api/forms";
@@ -80,8 +80,11 @@ export function RecordsPage() {
   const [recLoading, setRecLoading] = useState(false);
   const [recItems, setRecItems] = useState<any[]>([]);
   const [recTitle, setRecTitle] = useState("");
+  const [recGenOpen, setRecGenOpen] = useState(false);
+  const [recGenTitle, setRecGenTitle] = useState("");
+  const [recGenPercent, setRecGenPercent] = useState(1);
+  const [recGenStep, setRecGenStep] = useState("");
   const [pendingRecommendationIds, setPendingRecommendationIds] = useState<Set<string>>(() => new Set());
-  const [readyRecommendationIds, setReadyRecommendationIds] = useState<Set<string>>(() => new Set());
   const [failedRecommendationIds, setFailedRecommendationIds] = useState<Set<string>>(() => new Set());
 
   async function load() {
@@ -100,21 +103,66 @@ export function RecordsPage() {
     load();
   }, []);
 
+  function pickRecommendContent(content: any) {
+    const scores = content?.scores && typeof content.scores === "object" ? content.scores : {};
+    return {
+      scores: {
+        totalScore: (scores as any).totalScore ?? null,
+        rank: (scores as any).rank ?? null,
+        subjectsSelected: Array.isArray((scores as any).subjectsSelected) ? (scores as any).subjectsSelected : []
+      },
+      majorPreferences: Array.isArray(content?.majorPreferences) ? content.majorPreferences : []
+    };
+  }
+
   async function openRecommendation(form: FormRecord) {
+    try {
+      setRecLoading(true);
+      const res = await apiClient.get(`/recommendations/${form._id}`);
+      const data = res.data as any;
+      if (data && data.ok === true && data.status === "done" && data.result && Array.isArray(data.result.items)) {
+        const items = data.result.items as any[];
+        writeRecommendationCache(form, items);
+        setRecTitle(`${mapFormType(form.type)} - ${String((form.content as any)?.name ?? "")}`);
+        setRecItems(items);
+        setRecOpen(true);
+        return;
+      }
+      if (data && data.ok === true && data.status === "pending") {
+        const p = (data as any).progress;
+        if (p && typeof p.percent === "number") {
+          setRecGenTitle(`${mapFormType(form.type)} - ${String((form.content as any)?.name ?? "")}`);
+          setRecGenPercent(Math.max(1, Math.min(99, Number(p.percent))));
+          setRecGenStep(String(p.step ?? ""));
+          setRecGenOpen(true);
+        } else {
+          api.info("推荐正在生成中，请稍后…");
+        }
+        return;
+      }
+      if (data && data.ok === true && data.status === "failed" && typeof data.message === "string") {
+        api.error(data.message);
+        return;
+      }
+      api.info("暂无推荐结果，请先点击“生成推荐”");
+    } catch (err: any) {
+      api.error(err?.message || "获取推荐失败");
+    } finally {
+      setRecLoading(false);
+    }
+  }
+
+  async function startRecommendation(form: FormRecord) {
     if (pendingRecommendationIds.has(form._id)) {
       api.info("推荐正在生成中，请稍后…");
       return;
     }
-
-    const cached = readRecommendationCache(form);
-    if (cached && cached.length) {
-      setRecTitle(`${mapFormType(form.type)} - ${String((form.content as any)?.name ?? "")}`);
-      setRecItems(cached);
-      setRecOpen(true);
-      return;
-    }
-
     try {
+      setRecGenTitle(`${mapFormType(form.type)} - ${String((form.content as any)?.name ?? "")}`);
+      setRecGenPercent(1);
+      setRecGenStep("启动推荐脚本");
+      setRecGenOpen(true);
+
       if (failedRecommendationIds.has(form._id)) {
         setFailedRecommendationIds((prev) => {
           const next = new Set(prev);
@@ -124,20 +172,37 @@ export function RecordsPage() {
       }
       setPendingRecommendationIds((prev) => new Set([...prev, form._id]));
 
-      const res = await apiClient.post("/recommendations", { formId: form._id, content: form.content });
+      const minimized = pickRecommendContent(form.content as any);
+      const res = await apiClient.post("/recommendations", { formId: form._id, content: minimized });
       const data = res.data as any;
       if (!data || data.ok !== true) throw new Error("推荐请求失败");
 
-      const ready = await pollRecommendationReady(form._id, 10 * 60 * 1000);
-      if (!ready || !ready.length) throw new Error("推荐生成超时，请稍后重试");
-
-      writeRecommendationCache(form, ready);
-      setReadyRecommendationIds((prev) => new Set([...prev, form._id]));
-      setRecTitle(`${mapFormType(form.type)} - ${String((form.content as any)?.name ?? "")}`);
-      setRecItems(ready);
-      setRecOpen(true);
+      const started = Date.now();
+      while (Date.now() - started < 10 * 60 * 1000) {
+        const st = await apiClient.get(`/recommendations/${form._id}`);
+        const d = st.data as any;
+        if (d && d.ok === true && d.status === "done" && d.result && Array.isArray(d.result.items)) {
+          const items = d.result.items as any[];
+          writeRecommendationCache(form, items);
+          setRecTitle(`${mapFormType(form.type)} - ${String((form.content as any)?.name ?? "")}`);
+          setRecItems(items);
+          setRecGenOpen(false);
+          setRecOpen(true);
+          return;
+        }
+        if (d && d.ok === true && d.status === "failed" && typeof d.message === "string") {
+          throw new Error(d.message);
+        }
+        if (d && d.ok === true && d.status === "pending") {
+          const p = (d as any).progress;
+          if (p && typeof p.percent === "number") setRecGenPercent(Math.max(1, Math.min(99, Number(p.percent))));
+          if (p && typeof p.step === "string") setRecGenStep(p.step);
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      throw new Error("推荐生成超时，请稍后重试");
     } catch (err: any) {
-      api.error(err?.message || "获取推荐失败");
+      api.error(err?.message || "生成推荐失败");
       setFailedRecommendationIds((prev) => new Set([...prev, form._id]));
     } finally {
       setPendingRecommendationIds((prev) => {
@@ -145,6 +210,7 @@ export function RecordsPage() {
         next.delete(form._id);
         return next;
       });
+      setRecGenOpen(false);
     }
   }
 
@@ -160,15 +226,6 @@ export function RecordsPage() {
   const submitted = filtered
     .filter((f) => f.status === "submitted")
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-  const cachedSubmittedIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const f of submitted) {
-      const cached = readRecommendationCache(f);
-      if (cached && cached.length) ids.add(f._id);
-    }
-    return ids;
-  }, [submitted, readyRecommendationIds]);
 
   return (
     <MainLayout title="我的提交记录">
@@ -320,15 +377,17 @@ export function RecordsPage() {
                         查看详情
                       </Button>
                       <Button
-                        loading={pendingRecommendationIds.has(f._id)}
+                        disabled={pendingRecommendationIds.has(f._id)}
+                        onClick={() => startRecommendation(f)}
+                      >
+                        {failedRecommendationIds.has(f._id) ? "重新生成推荐" : "生成推荐"}
+                      </Button>
+                      <Button
+                        loading={recLoading}
                         disabled={pendingRecommendationIds.has(f._id)}
                         onClick={() => openRecommendation(f)}
                       >
-                        {cachedSubmittedIds.has(f._id)
-                          ? "查看推荐"
-                          : failedRecommendationIds.has(f._id)
-                            ? "重新生成推荐"
-                            : "生成推荐"}
+                        查看推荐
                       </Button>
                     </div>
                   </AppCard>
@@ -336,6 +395,13 @@ export function RecordsPage() {
               </div>
             ) : null}
           </div>
+          <Modal title={`推荐生成中 - ${recGenTitle}`} open={recGenOpen} footer={null} closable={false} maskClosable={false}>
+            <div className="space-y-3">
+              <Progress percent={recGenPercent} />
+              {recGenStep ? <div className="text-sm text-slate-700">{recGenStep}</div> : null}
+              <div className="text-xs text-slate-500">脚本运行中，请耐心等待。</div>
+            </div>
+          </Modal>
           <Modal
             title={`推荐结果 - ${recTitle}`}
             open={recOpen}

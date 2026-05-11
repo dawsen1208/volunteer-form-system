@@ -572,6 +572,7 @@ build_result <- function(admission_df, rank_df, parsed_input) {
 # ==========================================================
 
 tryCatch({
+  log_err("PROGRESS 5 读取输入")
   input_text <- ""
   if (!is.na(INPUT_PATH) && nzchar(INPUT_PATH) && file.exists(INPUT_PATH)) {
     input_lines <- readLines(INPUT_PATH, warn = FALSE, encoding = "UTF-8")
@@ -587,20 +588,24 @@ tryCatch({
     stop("Empty stdin JSON input")
   }
   
+  log_err("PROGRESS 10 解析输入")
   input <- fromJSON(input_text, simplifyVector = FALSE)
   parsed_input <- parse_input(input)
   
   admission_file <- get_admission_file(parsed_input$form_type)
   log_err("Using admission file:", admission_file)
   
+  log_err("PROGRESS 40 加载数据")
   data_list <- read_admission_data(admission_file)
   
+  log_err("PROGRESS 75 计算推荐")
   result <- build_result(
     admission_df = data_list$admission_df,
     rank_df = data_list$rank_df,
     parsed_input = parsed_input
   )
   
+  log_err("PROGRESS 95 输出结果")
   cat(
     toJSON(
       result,
@@ -609,6 +614,7 @@ tryCatch({
       na = "null"
     )
   )
+  log_err("PROGRESS 100 完成")
   
 }, error = function(e) {
   err <- list(

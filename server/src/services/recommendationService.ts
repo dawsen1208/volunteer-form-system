@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
 import { spawn } from "child_process";
+import crypto from "crypto";
 
 import mongoose from "mongoose";
 
@@ -21,17 +22,19 @@ export type RecommendationEngineResponse = {
 export type RecommendationStatusResponse =
   | { ok: true; status: "done"; result: RecommendationEngineResponse }
   | { ok: true; status: "failed"; message: string }
-  | { ok: true; status: "pending" }
+  | { ok: true; status: "pending"; progress?: { percent: number; step?: string } }
   | { ok: true; status: "none" };
 
 type RecommendationCacheEntry = {
   forUpdatedAt: string;
+  forKey?: string;
   result: RecommendationEngineResponse;
   generatedAt: string;
 };
 
 type RecommendationErrorEntry = {
   forUpdatedAt: string;
+  forKey?: string;
   message: string;
   failedAt: string;
 };
@@ -40,6 +43,7 @@ type RunningJob = {
   startedAt: number;
   proc: import("child_process").ChildProcess;
   canceled: boolean;
+  progress?: { percent: number; step?: string; updatedAt: number };
 };
 
 const runningJobs = new Map<string, RunningJob>();
@@ -77,6 +81,41 @@ function readRecommendationError(formDoc: any): RecommendationErrorEntry | null 
   if (typeof entry.forUpdatedAt !== "string") return null;
   if (typeof entry.message !== "string") return null;
   return entry as RecommendationErrorEntry;
+}
+
+function stableStringify(value: any): string {
+  const seen = new WeakSet();
+  const walk = (v: any): any => {
+    if (v === null || v === undefined) return v;
+    if (typeof v !== "object") return v;
+    if (seen.has(v)) return null;
+    seen.add(v);
+    if (Array.isArray(v)) return v.map(walk);
+    const keys = Object.keys(v).sort();
+    const out: Record<string, any> = {};
+    for (const k of keys) out[k] = walk(v[k]);
+    return out;
+  };
+  return JSON.stringify(walk(value));
+}
+
+function pickRecommendationInput(params: { formType: string; content: Record<string, any> }) {
+  const c = params.content ?? {};
+  const scores = c.scores && typeof c.scores === "object" && !Array.isArray(c.scores) ? c.scores : {};
+  const totalScore = (scores as any).totalScore ?? null;
+  const rank = (scores as any).rank ?? null;
+  const subjectsSelected = Array.isArray((scores as any).subjectsSelected) ? (scores as any).subjectsSelected : [];
+  const majorPreferences = Array.isArray(c.majorPreferences) ? c.majorPreferences : [];
+  return {
+    type: params.formType,
+    scores: { totalScore, rank, subjectsSelected },
+    majorPreferences
+  };
+}
+
+function getRecommendationKey(input: any): string {
+  const text = stableStringify(input);
+  return crypto.createHash("sha256").update(text).digest("hex");
 }
 
 async function pickFirstExistingPath(candidates: string[]): Promise<string | null> {
@@ -137,18 +176,38 @@ function tailText(text: string, maxChars: number) {
   return s.slice(s.length - maxChars);
 }
 
-function startRscript(params: { scriptPath: string; data1: string; data2: string; inputPath: string }) {
+function startRscript(params: {
+  scriptPath: string;
+  data1: string;
+  data2: string;
+  inputPath: string;
+  onProgress?: (p: { percent: number; step?: string }) => void;
+}) {
   const args = [params.scriptPath, "--input", params.inputPath, "--data1", params.data1, "--data2", params.data2];
   const proc = spawn(process.env.RSCRIPT_BIN ?? "Rscript", args, { stdio: ["ignore", "pipe", "pipe"] });
   let stderr = "";
+  let stderrLineBuf = "";
   const done = new Promise<string>((resolve, reject) => {
     let stdout = "";
     proc.stdout.on("data", (chunk) => {
       stdout += String(chunk);
     });
     proc.stderr.on("data", (chunk) => {
-      stderr += String(chunk);
+      const s = String(chunk);
+      stderr += s;
       if (stderr.length > 20000) stderr = tailText(stderr, 20000);
+      if (params.onProgress) {
+        stderrLineBuf += s;
+        const parts = stderrLineBuf.split(/\r?\n/);
+        stderrLineBuf = parts.pop() ?? "";
+        for (const line of parts) {
+          const m = line.match(/^PROGRESS\s+(\d{1,3})(?:\s+(.*))?$/);
+          if (!m) continue;
+          const percent = Math.max(0, Math.min(100, Number(m[1] ?? 0)));
+          const step = String(m[2] ?? "").trim() || undefined;
+          params.onProgress({ percent, step });
+        }
+      }
     });
     proc.on("error", (err) => reject(err));
     proc.on("close", (code) => {
@@ -159,7 +218,7 @@ function startRscript(params: { scriptPath: string; data1: string; data2: string
   return { proc, done, getStderrTail: (maxChars = 3000) => tailText(stderr, maxChars) };
 }
 
-async function startRecommendationEngine(content: RecommendInput): Promise<{
+async function startRecommendationEngine(content: RecommendInput, opts?: { onProgress?: (p: { percent: number; step?: string }) => void }): Promise<{
   proc: import("child_process").ChildProcess;
   done: Promise<RecommendationEngineResponse>;
   getStderrTail: (maxChars?: number) => string;
@@ -171,7 +230,13 @@ async function startRecommendationEngine(content: RecommendInput): Promise<{
   try {
     const scriptPath = await resolveScriptPath();
     const { data1, data2 } = await resolveDataPaths();
-    const { proc, done, getStderrTail } = startRscript({ scriptPath, data1, data2, inputPath: tmpFile });
+    const { proc, done, getStderrTail } = startRscript({
+      scriptPath,
+      data1,
+      data2,
+      inputPath: tmpFile,
+      onProgress: opts?.onProgress
+    });
 
     const parsedDone = (async () => {
       try {
@@ -254,15 +319,27 @@ export async function getRecommendationStatus(params: {
       : await getFormForUser(formId, String(params.userId ?? ""));
 
   const updatedAt = getUpdatedAtIso(doc);
+  const input = pickRecommendationInput({ formType: String(doc.type ?? ""), content: doc.content as any });
+  const key = getRecommendationKey(input);
   const cache = readRecommendationCache(doc);
-  if (cache && cache.forUpdatedAt === updatedAt && cache.result?.ok === true && Array.isArray(cache.result.items)) {
+  const cacheOk =
+    cache &&
+    cache.result?.ok === true &&
+    Array.isArray(cache.result.items) &&
+    (cache.forKey ? cache.forKey === key : cache.forUpdatedAt === updatedAt);
+  if (cacheOk) {
     return { ok: true, status: "done", result: cache.result };
   }
   const error = readRecommendationError(doc);
-  if (error && error.forUpdatedAt === updatedAt && error.message.trim()) {
+  const errOk = error && error.message.trim() && (error.forKey ? error.forKey === key : error.forUpdatedAt === updatedAt);
+  if (errOk) {
     return { ok: true, status: "failed", message: error.message };
   }
-  if (runningJobs.has(formId)) return { ok: true, status: "pending" };
+  const job = runningJobs.get(formId);
+  if (job) {
+    const progress = job.progress ? { percent: job.progress.percent, step: job.progress.step } : undefined;
+    return { ok: true, status: "pending", progress };
+  }
   return { ok: true, status: "none" };
 }
 
@@ -282,22 +359,36 @@ export async function requestRecommendation(params: {
 
   const updatedAt = getUpdatedAtIso(doc);
   const cache = readRecommendationCache(doc);
-  if (cache && cache.forUpdatedAt === updatedAt && cache.result?.ok === true && Array.isArray(cache.result.items)) {
+  const baseContent =
+    params.contentOverride && typeof params.contentOverride === "object" ? params.contentOverride : (doc.content as any);
+  const input = pickRecommendationInput({ formType: String(doc.type ?? ""), content: baseContent as any });
+  const key = getRecommendationKey(input);
+
+  const cacheOk =
+    cache &&
+    cache.result?.ok === true &&
+    Array.isArray(cache.result.items) &&
+    (cache.forKey ? cache.forKey === key : cache.forUpdatedAt === updatedAt);
+  if (cacheOk) {
     return { ok: true, status: "done", result: cache.result };
   }
   const error = readRecommendationError(doc);
-  if (error && error.forUpdatedAt === updatedAt && error.message.trim()) {
+  const errOk = error && error.message.trim() && (error.forKey ? error.forKey === key : error.forUpdatedAt === updatedAt);
+  if (errOk) {
     return { ok: true, status: "failed", message: error.message };
   }
 
   if (runningJobs.has(formId)) return { ok: true, status: "pending" };
 
-  const content =
-    params.contentOverride && typeof params.contentOverride === "object" ? params.contentOverride : (doc.content as any);
-
-  const engine = await startRecommendationEngine(content as Record<string, any>);
+  const engine = await startRecommendationEngine(input as Record<string, any>, {
+    onProgress: (p) => {
+      const job = runningJobs.get(formId);
+      if (!job || job.canceled) return;
+      job.progress = { percent: p.percent, step: p.step, updatedAt: Date.now() };
+    }
+  });
   const startedAt = Date.now();
-  runningJobs.set(formId, { startedAt, proc: engine.proc, canceled: false });
+  runningJobs.set(formId, { startedAt, proc: engine.proc, canceled: false, progress: { percent: 1, updatedAt: Date.now() } });
 
   let settled = false;
 
@@ -312,7 +403,12 @@ export async function requestRecommendation(params: {
     } catch {
       // ignore
     }
-    const entry: RecommendationErrorEntry = { forUpdatedAt: updatedAt, message: msg, failedAt: new Date().toISOString() };
+    const entry: RecommendationErrorEntry = {
+      forUpdatedAt: updatedAt,
+      forKey: key,
+      message: msg,
+      failedAt: new Date().toISOString()
+    };
     const nextContent =
       typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
     (nextContent as any).__recommendationError = entry;
@@ -335,7 +431,12 @@ export async function requestRecommendation(params: {
       clearTimeout(timeoutTimer);
       const job = runningJobs.get(formId);
       if (job?.canceled) return;
-      const entry: RecommendationCacheEntry = { forUpdatedAt: updatedAt, result, generatedAt: new Date().toISOString() };
+      const entry: RecommendationCacheEntry = {
+        forUpdatedAt: updatedAt,
+        forKey: key,
+        result,
+        generatedAt: new Date().toISOString()
+      };
       const nextContent =
         typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
       (nextContent as any).__recommendation = entry;
@@ -352,7 +453,12 @@ export async function requestRecommendation(params: {
       const tail = engine.getStderrTail(2500);
       const baseMsg = String(err?.message || "推荐生成失败");
       const message = tail ? `${baseMsg}\n\nRscript stderr (tail):\n${tail}` : baseMsg;
-      const entry: RecommendationErrorEntry = { forUpdatedAt: updatedAt, message, failedAt: new Date().toISOString() };
+      const entry: RecommendationErrorEntry = {
+        forUpdatedAt: updatedAt,
+        forKey: key,
+        message,
+        failedAt: new Date().toISOString()
+      };
       const nextContent =
         typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
       (nextContent as any).__recommendationError = entry;
@@ -365,7 +471,7 @@ export async function requestRecommendation(params: {
       runningJobs.delete(formId);
     });
 
-  return { ok: true, status: "pending" };
+  return { ok: true, status: "pending", progress: { percent: 1 } };
 }
 
 export async function cancelRecommendation(params: {
@@ -394,9 +500,12 @@ export async function cancelRecommendation(params: {
       ? await getFormForAdmin(formId)
       : await getFormForUser(formId, String(params.userId ?? ""));
   const updatedAt = getUpdatedAtIso(doc);
+  const input = pickRecommendationInput({ formType: String(doc.type ?? ""), content: doc.content as any });
+  const key = getRecommendationKey(input);
   const nextContent = typeof doc.content === "object" && doc.content !== null && !Array.isArray(doc.content) ? doc.content : {};
   (nextContent as any).__recommendationError = {
     forUpdatedAt: updatedAt,
+    forKey: key,
     message: "用户中止",
     failedAt: new Date().toISOString()
   } as RecommendationErrorEntry;
