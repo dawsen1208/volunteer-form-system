@@ -329,8 +329,10 @@ function buildExportHtml(
           </tr>
           <tr>
             <td class="label">班主任</td><td class="value">${escapeHtml(formatTextValue("班主任", (content as any)?.classTeacher))}</td>
-            <td class="label">体检结论</td><td class="value" colspan="2">${escapeHtml(formatTextValue("体检结论", (content as any)?.physicalExamConclusion))}</td>
-            <td class="label">体检是否正常</td><td class="value">${escapeHtml(formatTextValue("体检是否正常", (content as any)?.physicalExamNormal))}</td>
+            <td class="label">体检结论</td><td class="value" colspan="3">${escapeHtml(formatTextValue("体检结论", (content as any)?.physicalExamConclusion))}</td>
+          </tr>
+          <tr>
+            <td class="label">体检是否正常</td><td class="value" colspan="5">${escapeHtml(formatTextValue("体检是否正常", (content as any)?.physicalExamNormal))}</td>
           </tr>
         </table>
 
