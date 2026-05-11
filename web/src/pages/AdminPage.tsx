@@ -1,9 +1,10 @@
-import { Alert, Button, Input, Popconfirm, QRCode, Select, Space, Spin, Table, message } from "antd";
+import { Alert, Button, Input, Popconfirm, Select, Space, Spin, Table, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
-import { flushSync } from "react-dom";
 import { useNavigate } from "react-router-dom";
+
+import { QrCode } from "@rc-component/qrcode/es/libs/qrcodegen";
+import { ERROR_LEVEL_MAP } from "@rc-component/qrcode/es/utils";
 
 import { deleteAdminFormById, getAdminFormById, getAdminForms } from "../api/admin";
 import { apiClient } from "../api/client";
@@ -43,50 +44,77 @@ function getPublicSiteUrl(): string {
   }
 }
 
-async function generateQrSvgMarkup(value: string, size: number): Promise<string> {
-  const host = document.createElement("div");
-  host.style.position = "fixed";
-  host.style.left = "-10000px";
-  host.style.top = "0";
-  host.style.width = `${size}px`;
-  host.style.height = `${size}px`;
-  document.body.appendChild(host);
-
-  const root = createRoot(host);
-  const waitFrames = async (maxFrames: number) => {
-    for (let i = 0; i < maxFrames; i++) {
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      const svg = host.querySelector("svg") as SVGElement | null;
-      if (svg) return svg;
-    }
-    return null;
-  };
-
-  try {
-    flushSync(() => {
-      root.render(<QRCode value={value} size={size} type="svg" />);
-    });
-    const svg = await waitFrames(30);
-    if (!svg) return "";
-    svg.setAttribute("width", String(size));
-    svg.setAttribute("height", String(size));
-    return svg.outerHTML;
-  } finally {
-    root.unmount();
-    host.remove();
+function toBase64Utf8(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.slice(i, i + chunk));
   }
+  return btoa(binary);
 }
 
-async function generateQrMarkupsForExport(
-  forms: AdminFormRecord[],
-  publicUrl: string
-): Promise<Record<string, string>> {
-  const map: Record<string, string> = {};
-  for (const f of forms) {
-    const url = `${publicUrl}/#/form/${f.type}?id=${f._id}`;
-    map[f._id] = await generateQrSvgMarkup(url, 72);
+function generateQrPngBase64(value: string, targetSizePx: number): string {
+  const qr = QrCode.encodeText(value, ERROR_LEVEL_MAP.M);
+  const modules = qr.getModules();
+  const margin = 4;
+  const count = modules.length + margin * 2;
+  const scale = Math.max(1, Math.floor(targetSizePx / count));
+  const size = count * scale;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.fillStyle = "#000000";
+  for (let y = 0; y < modules.length; y++) {
+    const row = modules[y];
+    for (let x = 0; x < row.length; x++) {
+      if (!row[x]) continue;
+      ctx.fillRect((x + margin) * scale, (y + margin) * scale, scale, scale);
+    }
   }
-  return map;
+
+  const dataUrl = canvas.toDataURL("image/png");
+  const base64 = dataUrl.split(",")[1] ?? "";
+  return base64;
+}
+
+type QrAsset = { name: string; base64: string };
+
+function buildMhtmlDoc(html: string, assets: QrAsset[]): string {
+  const boundary = `----=_NextPart_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+  const header =
+    `MIME-Version: 1.0\r\n` +
+    `Content-Type: multipart/related; boundary="${boundary}"; type="text/html"\r\n\r\n`;
+
+  const htmlBase64 = toBase64Utf8(html);
+  const htmlPart =
+    `--${boundary}\r\n` +
+    `Content-Type: text/html; charset="utf-8"\r\n` +
+    `Content-Transfer-Encoding: base64\r\n` +
+    `Content-Location: file:///C:/export.html\r\n\r\n` +
+    `${htmlBase64}\r\n\r\n`;
+
+  const assetParts = assets
+    .map((a) => {
+      const content =
+        `--${boundary}\r\n` +
+        `Content-Type: image/png\r\n` +
+        `Content-Transfer-Encoding: base64\r\n` +
+        `Content-Location: ${a.name}\r\n\r\n` +
+        `${a.base64}\r\n\r\n`;
+      return content;
+    })
+    .join("");
+
+  const footer = `--${boundary}--\r\n`;
+  return header + htmlPart + assetParts + footer;
 }
 
 function formatTextValue(label: string, value: any) {
@@ -132,10 +160,10 @@ function getScoreFieldName(subject: string) {
 function buildExportHtml(
   forms: AdminFormRecord[],
   docTitle?: string,
-  opts?: { publicUrl?: string; qrMarkups?: Record<string, string> }
+  opts?: { publicUrl?: string; qrSrcMap?: Record<string, string> }
 ) {
   const publicUrl = (opts?.publicUrl ?? "").replace(/\/+$/, "");
-  const qrMarkups = opts?.qrMarkups ?? {};
+  const qrSrcMap = opts?.qrSrcMap ?? {};
   const css = `
     @page { size: A4; margin: 10mm; }
     body { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; color: #111; }
@@ -144,9 +172,8 @@ function buildExportHtml(
     h1 { font-size: 18px; margin: 0; text-align: center; letter-spacing: 1px; line-height: 1.2; }
     .header { position: relative; margin: 0 0 6px; }
     .header-left { flex: 1; min-width: 0; }
-    .header-right { position: absolute; top: 0; right: 0; width: 90px; text-align: right; }
-    .qr-wrap { width: 72px; height: 72px; display: inline-block; }
-    .qr-wrap svg { width: 72px; height: 72px; display: block; }
+    .header-right { position: absolute; top: 0; right: 0; width: 88px; text-align: right; }
+    .qr-img { width: 72px; height: 72px; display: inline-block; }
     .qr-label { font-size: 10px; color: #333; margin: 0 0 4px; }
     .meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; margin: 4px 0 0; }
     .meta .item { white-space: nowrap; }
@@ -169,7 +196,7 @@ function buildExportHtml(
     const statusText = form.status === "submitted" ? "已提交" : "草稿";
     const filledAtText = form.updatedAt ? formatTime(form.updatedAt) : "-";
     const qrUrl = publicUrl ? `${publicUrl}/#/form/${form.type}?id=${form._id}` : "";
-    const qrMarkup = qrUrl ? (qrMarkups[form._id] ?? "") : "";
+    const qrSrc = qrUrl ? (qrSrcMap[form._id] ?? "") : "";
 
     const selectedSubjects: string[] = Array.isArray((content as any)?.scores?.subjectsSelected)
       ? ((content as any).scores.subjectsSelected as string[])
@@ -231,7 +258,7 @@ function buildExportHtml(
           </div>
           <div class="header-right">
             <div class="qr-label">扫码打开线上表单</div>
-            ${qrMarkup ? `<div class="qr-wrap">${qrMarkup}</div>` : ""}
+            ${qrSrc ? `<img class="qr-img" src="${qrSrc}" />` : ""}
           </div>
         </div>
 
@@ -344,6 +371,19 @@ function downloadWord(html: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function downloadWordMhtml(html: string, assets: QrAsset[], filename: string) {
+  const mhtml = buildMhtmlDoc(html, assets);
+  const blob = new Blob([mhtml], { type: "application/msword;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function printToPdf(html: string) {
   const w = window.open("", "_blank");
   if (!w) return;
@@ -351,9 +391,17 @@ function printToPdf(html: string) {
   w.document.write(html);
   w.document.close();
   w.focus();
-  setTimeout(() => {
-    w.print();
-  }, 300);
+  const startedAt = Date.now();
+  const check = () => {
+    const imgs = Array.from(w.document.images ?? []);
+    const allLoaded = imgs.every((img) => img.complete);
+    if (allLoaded || Date.now() - startedAt > 4000) {
+      w.print();
+      return;
+    }
+    setTimeout(check, 80);
+  };
+  setTimeout(check, 60);
 }
 
 export function AdminPage() {
@@ -463,7 +511,17 @@ export function AdminPage() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
     const publicUrl = getPublicSiteUrl();
-    const qrMarkups = await generateQrMarkupsForExport(list, publicUrl);
+    const qrSrcMap: Record<string, string> = {};
+    const assets: QrAsset[] = [];
+    for (const f of list) {
+      const url = `${publicUrl}/#/form/${f.type}?id=${f._id}`;
+      const name = `qr_${f._id}.png`;
+      const base64 = generateQrPngBase64(url, 96);
+      if (base64) {
+        qrSrcMap[f._id] = name;
+        assets.push({ name, base64 });
+      }
+    }
     const one = list.length === 1 ? list[0] : null;
     const typeText = one ? mapFormType(one.type) : "志愿表单";
     const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
@@ -471,15 +529,22 @@ export function AdminPage() {
       ? new Date(one.updatedAt).toISOString().slice(0, 10)
       : new Date().toISOString().slice(0, 10);
     const filename = `${typeText}-${nameText}-导出-${date}.doc`;
-    const html = buildExportHtml(list, filename.replace(/\.doc$/, ""), { publicUrl, qrMarkups });
-    downloadWord(html, filename);
+    const html = buildExportHtml(list, filename.replace(/\.doc$/, ""), { publicUrl, qrSrcMap });
+    downloadWordMhtml(html, assets, filename);
   }
 
   async function exportPdf() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
     const publicUrl = getPublicSiteUrl();
-    const qrMarkups = await generateQrMarkupsForExport(list, publicUrl);
+    const qrSrcMap: Record<string, string> = {};
+    for (const f of list) {
+      const url = `${publicUrl}/#/form/${f.type}?id=${f._id}`;
+      const base64 = generateQrPngBase64(url, 96);
+      if (base64) {
+        qrSrcMap[f._id] = `data:image/png;base64,${base64}`;
+      }
+    }
     const one = list.length === 1 ? list[0] : null;
     const typeText = one ? mapFormType(one.type) : "志愿表单";
     const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
@@ -487,7 +552,7 @@ export function AdminPage() {
       ? new Date(one.updatedAt).toISOString().slice(0, 10)
       : new Date().toISOString().slice(0, 10);
     const title = `${typeText}-${nameText}-导出-${date}`;
-    const html = buildExportHtml(list, title, { publicUrl, qrMarkups });
+    const html = buildExportHtml(list, title, { publicUrl, qrSrcMap });
     printToPdf(html);
   }
 
