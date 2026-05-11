@@ -43,7 +43,7 @@ function getPublicSiteUrl(): string {
   }
 }
 
-async function generateQrPngDataUrl(value: string, size: number): Promise<string> {
+async function generateQrSvgMarkup(value: string, size: number): Promise<string> {
   const host = document.createElement("div");
   host.style.position = "fixed";
   host.style.left = "-10000px";
@@ -56,50 +56,35 @@ async function generateQrPngDataUrl(value: string, size: number): Promise<string
   const waitFrames = async (maxFrames: number) => {
     for (let i = 0; i < maxFrames; i++) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      const canvas = host.querySelector("canvas") as HTMLCanvasElement | null;
       const svg = host.querySelector("svg") as SVGElement | null;
-      if (canvas || svg) return { canvas, svg };
+      if (svg) return svg;
     }
-    return { canvas: null as HTMLCanvasElement | null, svg: null as SVGElement | null };
-  };
-
-  const toSvgDataUrl = (svgEl: SVGElement) => {
-    const svgText = svgEl.outerHTML;
-    const encoded = encodeURIComponent(svgText)
-      .replace(/%0A/g, "")
-      .replace(/%0D/g, "")
-      .replace(/%09/g, "");
-    return `data:image/svg+xml;charset=utf-8,${encoded}`;
+    return null;
   };
 
   try {
     flushSync(() => {
-      root.render(<QRCode value={value} size={size} type="canvas" />);
-    });
-    const { canvas } = await waitFrames(30);
-    const dataUrl = canvas ? canvas.toDataURL("image/png") : "";
-    if (dataUrl && dataUrl.startsWith("data:image/png")) return dataUrl;
-
-    flushSync(() => {
       root.render(<QRCode value={value} size={size} type="svg" />);
     });
-    const { svg } = await waitFrames(30);
-    if (svg) return toSvgDataUrl(svg);
-    return "";
+    const svg = await waitFrames(30);
+    if (!svg) return "";
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    return svg.outerHTML;
   } finally {
     root.unmount();
     host.remove();
   }
 }
 
-async function generateQrImagesForExport(
+async function generateQrMarkupsForExport(
   forms: AdminFormRecord[],
   publicUrl: string
 ): Promise<Record<string, string>> {
   const map: Record<string, string> = {};
   for (const f of forms) {
     const url = `${publicUrl}/#/form/${f.type}?id=${f._id}`;
-    map[f._id] = await generateQrPngDataUrl(url, 120);
+    map[f._id] = await generateQrSvgMarkup(url, 72);
   }
   return map;
 }
@@ -147,22 +132,22 @@ function getScoreFieldName(subject: string) {
 function buildExportHtml(
   forms: AdminFormRecord[],
   docTitle?: string,
-  opts?: { publicUrl?: string; qrImages?: Record<string, string> }
+  opts?: { publicUrl?: string; qrMarkups?: Record<string, string> }
 ) {
   const publicUrl = (opts?.publicUrl ?? "").replace(/\/+$/, "");
-  const qrImages = opts?.qrImages ?? {};
+  const qrMarkups = opts?.qrMarkups ?? {};
   const css = `
     @page { size: A4; margin: 10mm; }
     body { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; color: #111; }
     .page { page-break-after: always; }
     .page:last-child { page-break-after: auto; }
     h1 { font-size: 18px; margin: 0; text-align: center; letter-spacing: 1px; line-height: 1.2; }
-    .header { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; margin: 0 0 6px; }
+    .header { position: relative; margin: 0 0 6px; }
     .header-left { flex: 1; min-width: 0; }
-    .header-right { width: 130px; text-align: right; }
-    .qr { width: 120px; height: 120px; display: inline-block; }
+    .header-right { position: absolute; top: 0; right: 0; width: 90px; text-align: right; }
+    .qr-wrap { width: 72px; height: 72px; display: inline-block; }
+    .qr-wrap svg { width: 72px; height: 72px; display: block; }
     .qr-label { font-size: 10px; color: #333; margin: 0 0 4px; }
-    .qr-url { font-size: 9px; color: #666; word-break: break-all; line-height: 1.2; }
     .meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; margin: 4px 0 0; }
     .meta .item { white-space: nowrap; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -184,7 +169,7 @@ function buildExportHtml(
     const statusText = form.status === "submitted" ? "已提交" : "草稿";
     const filledAtText = form.updatedAt ? formatTime(form.updatedAt) : "-";
     const qrUrl = publicUrl ? `${publicUrl}/#/form/${form.type}?id=${form._id}` : "";
-    const qrImg = qrImages[form._id] ?? "";
+    const qrMarkup = qrUrl ? (qrMarkups[form._id] ?? "") : "";
 
     const selectedSubjects: string[] = Array.isArray((content as any)?.scores?.subjectsSelected)
       ? ((content as any).scores.subjectsSelected as string[])
@@ -246,8 +231,7 @@ function buildExportHtml(
           </div>
           <div class="header-right">
             <div class="qr-label">扫码打开线上表单</div>
-            ${qrImg ? `<img class="qr" src="${qrImg}" />` : ""}
-            ${qrUrl ? `<div class="qr-url">${escapeHtml(qrUrl)}</div>` : ""}
+            ${qrMarkup ? `<div class="qr-wrap">${qrMarkup}</div>` : ""}
           </div>
         </div>
 
@@ -479,7 +463,7 @@ export function AdminPage() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
     const publicUrl = getPublicSiteUrl();
-    const qrImages = await generateQrImagesForExport(list, publicUrl);
+    const qrMarkups = await generateQrMarkupsForExport(list, publicUrl);
     const one = list.length === 1 ? list[0] : null;
     const typeText = one ? mapFormType(one.type) : "志愿表单";
     const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
@@ -487,7 +471,7 @@ export function AdminPage() {
       ? new Date(one.updatedAt).toISOString().slice(0, 10)
       : new Date().toISOString().slice(0, 10);
     const filename = `${typeText}-${nameText}-导出-${date}.doc`;
-    const html = buildExportHtml(list, filename.replace(/\.doc$/, ""), { publicUrl, qrImages });
+    const html = buildExportHtml(list, filename.replace(/\.doc$/, ""), { publicUrl, qrMarkups });
     downloadWord(html, filename);
   }
 
@@ -495,7 +479,7 @@ export function AdminPage() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
     const publicUrl = getPublicSiteUrl();
-    const qrImages = await generateQrImagesForExport(list, publicUrl);
+    const qrMarkups = await generateQrMarkupsForExport(list, publicUrl);
     const one = list.length === 1 ? list[0] : null;
     const typeText = one ? mapFormType(one.type) : "志愿表单";
     const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
@@ -503,7 +487,7 @@ export function AdminPage() {
       ? new Date(one.updatedAt).toISOString().slice(0, 10)
       : new Date().toISOString().slice(0, 10);
     const title = `${typeText}-${nameText}-导出-${date}`;
-    const html = buildExportHtml(list, title, { publicUrl, qrImages });
+    const html = buildExportHtml(list, title, { publicUrl, qrMarkups });
     printToPdf(html);
   }
 
