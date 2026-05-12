@@ -16,6 +16,7 @@ const corsOrigin =
 export const app = express();
 
 app.use(cors({ origin: corsOrigin }));
+app.options("*", cors({ origin: corsOrigin }));
 app.use(express.json());
 
 app.use("/api", apiRoutes);
