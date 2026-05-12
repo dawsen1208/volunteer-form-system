@@ -157,39 +157,8 @@ export async function updateMyForm(
     throw new AppError(409, "已提交表单不可修改");
   }
 
-  const prevContent =
-    typeof form.content === "object" && form.content !== null && !Array.isArray(form.content)
-      ? (form.content as Record<string, any>)
-      : {};
-
   validateStrictEnums(form.type as FormType, nextContent);
-
-  const getRecommendSig = (c: Record<string, any>): string => {
-    const scores = c.scores && typeof c.scores === "object" && !Array.isArray(c.scores) ? c.scores : {};
-    const totalScore = (scores as any).totalScore ?? null;
-    const rank = (scores as any).rank ?? null;
-    const subjectsSelected = Array.isArray((scores as any).subjectsSelected)
-      ? (scores as any).subjectsSelected
-      : [];
-    const majorPreferences = Array.isArray(c.majorPreferences) ? c.majorPreferences : [];
-    const majors = majorPreferences.map((m: any) => ({
-      index: m?.index ?? null,
-      majorCategory: m?.majorCategory ?? null,
-      majorName: m?.majorName ?? null
-    }));
-    return JSON.stringify({ totalScore, rank, subjectsSelected, majors });
-  };
-
-  const prevSig = getRecommendSig(prevContent);
-  const nextSig = getRecommendSig(nextContent);
-
-  const meta: Record<string, any> = {};
-  if (prevSig === nextSig) {
-    if ("__recommendation" in prevContent) meta.__recommendation = (prevContent as any).__recommendation;
-    if ("__recommendationError" in prevContent) meta.__recommendationError = (prevContent as any).__recommendationError;
-  }
-
-  form.content = { ...nextContent, ...meta };
+  form.content = nextContent;
   await form.save();
   return form;
 }

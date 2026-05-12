@@ -1,4 +1,4 @@
-import { Alert, Button, Input, Popconfirm, Select, Space, Spin, Table, message } from "antd";
+import { Button, Input, Popconfirm, Select, Space, Spin, Table, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -7,7 +7,6 @@ import { QrCode } from "@rc-component/qrcode/es/libs/qrcodegen";
 import { ERROR_LEVEL_MAP } from "@rc-component/qrcode/es/utils";
 
 import { deleteAdminFormById, getAdminFormById, getAdminForms } from "../api/admin";
-import { apiClient } from "../api/client";
 import { AppCard } from "../components/AppCard";
 import { PageHeader } from "../components/PageHeader";
 import { StatusTag } from "../components/StatusTag";
@@ -496,28 +495,6 @@ export function AdminPage() {
     return ok;
   }
 
-  async function generateRecommendations() {
-    const ids = selectedIds;
-    if (!ids.length) {
-      api.error("请先勾选要生成推荐的表单");
-      return;
-    }
-    try {
-      setLoading(true);
-      const details = await Promise.all(ids.map(getAdminFormById));
-      await Promise.all(
-        details.map(async (d) => {
-          await apiClient.post("/recommendations", { formId: d._id, content: d.content });
-        })
-      );
-      api.success(`已开始生成 ${details.length} 条推荐结果（生成完成后可在用户端“查看推荐”查看）`);
-    } catch (err: any) {
-      api.error(err?.message || "生成推荐失败");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function deleteSelectedForms() {
     const ids = selectedIds;
     if (!ids.length) {
@@ -708,9 +685,6 @@ export function AdminPage() {
               <Button disabled={!selectedIds.length} onClick={exportWord}>
                 导出 Word
               </Button>
-              <Button type="primary" disabled={!selectedIds.length} onClick={generateRecommendations}>
-                生成推荐
-              </Button>
               <Popconfirm
                 title={`确认删除已勾选的 ${selectedIds.length} 条表单？`}
                 description="删除后不可恢复。"
@@ -726,13 +700,6 @@ export function AdminPage() {
               </Popconfirm>
             </Space>
           </div>
-          <Alert
-            type="warning"
-            showIcon
-            message="推荐功能声明"
-            description="本推荐功能仅用于提供志愿填报建议，不包含录取预测功能；参与分析的所有数据均为往年数据，不保证推荐学校在当年一定能录取。"
-            className="mb-4"
-          />
           {loading ? (
             <div className="flex justify-center py-10">
               <Spin />
