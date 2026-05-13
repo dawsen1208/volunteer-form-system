@@ -207,11 +207,13 @@ function buildExportHtml(
     .header { position: relative; margin: 0 0 6px; }
     .header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .header-left { flex: 1; min-width: 0; }
-    .brand { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+    .brand { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin: 0 0 6px; }
+    .brand-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .brand-logo { width: 34px; height: 34px; flex: 0 0 auto; }
     .brand-text { min-width: 0; }
     .brand-name { font-size: 12px; font-weight: 800; line-height: 1.2; color: #b91c1c; }
     .brand-pinyin { font-size: 10px; font-weight: 700; line-height: 1.2; color: #b91c1c; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+    .brand-contact { font-size: 10px; color: #111; line-height: 1.2; white-space: nowrap; padding-top: 1px; }
     .header-right { width: 88px; text-align: right; flex: 0 0 auto; }
     .qr-img { width: 72px; height: 72px; display: inline-block; }
     .qr-label { font-size: 10px; color: #333; margin: 0 0 4px; }
@@ -298,11 +300,14 @@ function buildExportHtml(
           <div class="header-top">
             <div class="header-left">
               <div class="brand">
-                ${brandLogoSvg}
-                <div class="brand-text">
-                  <div class="brand-name">北京格学教育</div>
-                  <div class="brand-pinyin">BEIJING GEXUE EDUCATION</div>
+                <div class="brand-left">
+                  ${brandLogoSvg}
+                  <div class="brand-text">
+                    <div class="brand-name">北京格学教育</div>
+                    <div class="brand-pinyin">BEIJING GEXUE EDUCATION</div>
+                  </div>
                 </div>
+                <div class="brand-contact">丁老师 13396216040 · 李老师 15163091937</div>
               </div>
               <h1>高考志愿填报约谈表</h1>
               <div class="meta">
@@ -311,7 +316,6 @@ function buildExportHtml(
                 <div class="item">类型：${escapeHtml(typeText)}</div>
                 <div class="item">状态：${escapeHtml(statusText)}</div>
                 <div class="item">填写时间：${escapeHtml(filledAtText)}</div>
-                <div class="item">丁老师 13396216040 · 李老师 15163091937</div>
               </div>
             </div>
             <div class="header-right">

@@ -87,11 +87,11 @@ function BrandHeader(props: { size?: number }) {
           </text>
         </svg>
         <div className="min-w-0">
-          <div className="text-xl font-semibold text-red-700">北京格学教育</div>
-          <div className="text-sm font-semibold uppercase tracking-widest text-red-700">
-            BEIJING GEXUE EDUCATION
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+            <div className="text-xl font-semibold text-red-700">北京格学教育</div>
+            <div className="text-sm text-slate-600">丁老师 13396216040 · 李老师 15163091937</div>
           </div>
-          <div className="text-sm text-slate-600">丁老师 13396216040 · 李老师 15163091937</div>
+          <div className="text-sm font-semibold uppercase tracking-widest text-red-700">BEIJING GEXUE EDUCATION</div>
         </div>
       </div>
       <div>
