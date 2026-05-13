@@ -177,6 +177,14 @@ function buildExportHtml(
 ) {
   const publicUrl = (opts?.publicUrl ?? "").replace(/\/+$/, "");
   const qrSrcMap = opts?.qrSrcMap ?? {};
+  const brandLogoSvg = `
+    <svg class="brand-logo" viewBox="0 0 100 100" aria-label="格学" role="img">
+      <circle cx="50" cy="50" r="48" fill="#7A0C0C" />
+      <circle cx="50" cy="50" r="40" fill="#FFFFFF" opacity="0.08" />
+      <circle cx="50" cy="50" r="38" fill="#7A0C0C" />
+      <text x="50" y="56" text-anchor="middle" font-size="34" font-family="Microsoft YaHei, PingFang SC, Arial" fill="#FFFFFF" font-weight="700">格学</text>
+    </svg>
+  `.trim();
   const css = `
     @page { size: A4; margin: 10mm; }
     body { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; color: #111; }
@@ -184,8 +192,14 @@ function buildExportHtml(
     .page:last-child { page-break-after: auto; }
     h1 { font-size: 18px; margin: 0; text-align: center; letter-spacing: 1px; line-height: 1.2; }
     .header { position: relative; margin: 0 0 6px; }
+    .header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .header-left { flex: 1; min-width: 0; }
-    .header-right { position: absolute; top: 0; right: 0; width: 88px; text-align: right; }
+    .brand { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+    .brand-logo { width: 34px; height: 34px; flex: 0 0 auto; }
+    .brand-text { min-width: 0; }
+    .brand-name { font-size: 12px; font-weight: 700; line-height: 1.2; }
+    .brand-contact { font-size: 10px; color: #333; line-height: 1.2; margin-top: 2px; }
+    .header-right { width: 88px; text-align: right; flex: 0 0 auto; }
     .qr-img { width: 72px; height: 72px; display: inline-block; }
     .qr-label { font-size: 10px; color: #333; margin: 0 0 4px; }
     .meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; margin: 4px 0 0; }
@@ -268,19 +282,28 @@ function buildExportHtml(
     return `
       <div class="page">
         <div class="header">
-          <div class="header-left">
-            <h1>高考志愿填报约谈表</h1>
-            <div class="meta">
-              <div class="item">姓名：${escapeHtml(name)}</div>
-              <div class="item">手机号：${escapeHtml(String(phone))}</div>
-              <div class="item">类型：${escapeHtml(typeText)}</div>
-              <div class="item">状态：${escapeHtml(statusText)}</div>
-              <div class="item">填写时间：${escapeHtml(filledAtText)}</div>
+          <div class="header-top">
+            <div class="header-left">
+              <div class="brand">
+                ${brandLogoSvg}
+                <div class="brand-text">
+                  <div class="brand-name">格学志愿填报</div>
+                  <div class="brand-contact">丁老师 13396216040 · 李老师 15163091937</div>
+                </div>
+              </div>
+              <h1>高考志愿填报约谈表</h1>
+              <div class="meta">
+                <div class="item">姓名：${escapeHtml(name)}</div>
+                <div class="item">手机号：${escapeHtml(String(phone))}</div>
+                <div class="item">类型：${escapeHtml(typeText)}</div>
+                <div class="item">状态：${escapeHtml(statusText)}</div>
+                <div class="item">填写时间：${escapeHtml(filledAtText)}</div>
+              </div>
             </div>
-          </div>
-          <div class="header-right">
-            <div class="qr-label">扫码打开线上表单</div>
-            ${qrSrc ? `<img class="qr-img" src="${qrSrc}" />` : ""}
+            <div class="header-right">
+              <div class="qr-label">扫码打开线上表单</div>
+              ${qrSrc ? `<img class="qr-img" src="${qrSrc}" />` : ""}
+            </div>
           </div>
         </div>
 
