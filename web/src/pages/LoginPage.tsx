@@ -19,31 +19,79 @@ function BrandHeader(props: { size?: number }) {
         <svg
           width={size}
           height={size}
-          viewBox="0 0 100 100"
+          viewBox="0 0 200 200"
           role="img"
           aria-label="格学"
           className="shrink-0"
         >
-          <circle cx="50" cy="50" r="48" fill="#7A0C0C" />
-          <circle cx="50" cy="50" r="40" fill="#FFFFFF" opacity="0.08" />
-          <circle cx="50" cy="50" r="38" fill="#7A0C0C" />
+          <defs>
+            <path
+              id="gx-top"
+              d="M 100,100 m -82,0 a 82,82 0 1,1 164,0 a 82,82 0 1,1 -164,0"
+            />
+            <path
+              id="gx-bottom"
+              d="M 100,100 m 82,0 a 82,82 0 1,1 -164,0 a 82,82 0 1,1 164,0"
+            />
+          </defs>
+          <circle cx="100" cy="100" r="94" fill="#FFFFFF" stroke="#7A0C0C" strokeWidth="8" />
+          <circle cx="100" cy="100" r="82" fill="none" stroke="#7A0C0C" strokeWidth="4" />
+          <circle cx="100" cy="110" r="64" fill="#7A0C0C" />
           <text
-            x="50"
-            y="56"
-            textAnchor="middle"
-            fontSize="34"
+            fontSize="12"
+            fontFamily="Arial"
+            fill="#7A0C0C"
+            letterSpacing="0.6"
+          >
+            <textPath href="#gx-top" startOffset="50%" textAnchor="middle">
+              GeXue Research Institute of College Admission
+            </textPath>
+          </text>
+          <text
+            fontSize="14"
             fontFamily="Microsoft YaHei, PingFang SC, Arial"
+            fill="#7A0C0C"
+            letterSpacing="2"
+          >
+            <textPath href="#gx-bottom" startOffset="50%" textAnchor="middle">
+              格学教育
+            </textPath>
+          </text>
+          <text
+            x="100"
+            y="108"
+            textAnchor="middle"
+            fontSize="54"
+            fontFamily="STKaiti, KaiTi, SimSun, Microsoft YaHei, PingFang SC, Arial"
             fill="#FFFFFF"
             fontWeight="700"
           >
             格学
           </text>
+          <path
+            d="M58 132c16-10 32-14 42-14s26 4 42 14"
+            fill="none"
+            stroke="#FFFFFF"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M58 132c0 0 10 8 42 8s42-8 42-8"
+            fill="none"
+            stroke="#FFFFFF"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+          <text x="100" y="168" textAnchor="middle" fontSize="16" fontFamily="Arial" fill="#FFFFFF" fontWeight="700">
+            2011
+          </text>
         </svg>
         <div className="min-w-0">
-          <div className="text-xl font-semibold text-slate-900">格学志愿填报</div>
-          <div className="text-sm text-slate-600">
-            丁老师 13396216040 · 李老师 15163091937
+          <div className="text-xl font-semibold text-red-700">北京格学教育</div>
+          <div className="text-sm font-semibold uppercase tracking-widest text-red-700">
+            BEIJING GEXUE EDUCATION
           </div>
+          <div className="text-sm text-slate-600">丁老师 13396216040 · 李老师 15163091937</div>
         </div>
       </div>
       <div>

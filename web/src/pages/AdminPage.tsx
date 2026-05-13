@@ -178,11 +178,24 @@ function buildExportHtml(
   const publicUrl = (opts?.publicUrl ?? "").replace(/\/+$/, "");
   const qrSrcMap = opts?.qrSrcMap ?? {};
   const brandLogoSvg = `
-    <svg class="brand-logo" viewBox="0 0 100 100" aria-label="格学" role="img">
-      <circle cx="50" cy="50" r="48" fill="#7A0C0C" />
-      <circle cx="50" cy="50" r="40" fill="#FFFFFF" opacity="0.08" />
-      <circle cx="50" cy="50" r="38" fill="#7A0C0C" />
-      <text x="50" y="56" text-anchor="middle" font-size="34" font-family="Microsoft YaHei, PingFang SC, Arial" fill="#FFFFFF" font-weight="700">格学</text>
+    <svg class="brand-logo" viewBox="0 0 200 200" aria-label="格学" role="img">
+      <defs>
+        <path id="gx-top" d="M 100,100 m -82,0 a 82,82 0 1,1 164,0 a 82,82 0 1,1 -164,0" />
+        <path id="gx-bottom" d="M 100,100 m 82,0 a 82,82 0 1,1 -164,0 a 82,82 0 1,1 164,0" />
+      </defs>
+      <circle cx="100" cy="100" r="94" fill="#FFFFFF" stroke="#7A0C0C" stroke-width="8" />
+      <circle cx="100" cy="100" r="82" fill="none" stroke="#7A0C0C" stroke-width="4" />
+      <circle cx="100" cy="110" r="64" fill="#7A0C0C" />
+      <text font-size="12" font-family="Arial" fill="#7A0C0C" letter-spacing="0.6">
+        <textPath href="#gx-top" startOffset="50%" text-anchor="middle">GeXue Research Institute of College Admission</textPath>
+      </text>
+      <text font-size="14" font-family="Microsoft YaHei, PingFang SC, Arial" fill="#7A0C0C" letter-spacing="2">
+        <textPath href="#gx-bottom" startOffset="50%" text-anchor="middle">格学教育</textPath>
+      </text>
+      <text x="100" y="108" text-anchor="middle" font-size="54" font-family="STKaiti, KaiTi, SimSun, Microsoft YaHei, PingFang SC, Arial" fill="#FFFFFF" font-weight="700">格学</text>
+      <path d="M58 132c16-10 32-14 42-14s26 4 42 14" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" />
+      <path d="M58 132c0 0 10 8 42 8s42-8 42-8" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" />
+      <text x="100" y="168" text-anchor="middle" font-size="16" font-family="Arial" fill="#FFFFFF" font-weight="700">2011</text>
     </svg>
   `.trim();
   const css = `
@@ -197,8 +210,8 @@ function buildExportHtml(
     .brand { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
     .brand-logo { width: 34px; height: 34px; flex: 0 0 auto; }
     .brand-text { min-width: 0; }
-    .brand-name { font-size: 12px; font-weight: 700; line-height: 1.2; }
-    .brand-contact { font-size: 10px; color: #333; line-height: 1.2; margin-top: 2px; }
+    .brand-name { font-size: 12px; font-weight: 800; line-height: 1.2; color: #b91c1c; }
+    .brand-pinyin { font-size: 10px; font-weight: 700; line-height: 1.2; color: #b91c1c; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
     .header-right { width: 88px; text-align: right; flex: 0 0 auto; }
     .qr-img { width: 72px; height: 72px; display: inline-block; }
     .qr-label { font-size: 10px; color: #333; margin: 0 0 4px; }
@@ -287,8 +300,8 @@ function buildExportHtml(
               <div class="brand">
                 ${brandLogoSvg}
                 <div class="brand-text">
-                  <div class="brand-name">格学志愿填报</div>
-                  <div class="brand-contact">丁老师 13396216040 · 李老师 15163091937</div>
+                  <div class="brand-name">北京格学教育</div>
+                  <div class="brand-pinyin">BEIJING GEXUE EDUCATION</div>
                 </div>
               </div>
               <h1>高考志愿填报约谈表</h1>
@@ -298,6 +311,7 @@ function buildExportHtml(
                 <div class="item">类型：${escapeHtml(typeText)}</div>
                 <div class="item">状态：${escapeHtml(statusText)}</div>
                 <div class="item">填写时间：${escapeHtml(filledAtText)}</div>
+                <div class="item">丁老师 13396216040 · 李老师 15163091937</div>
               </div>
             </div>
             <div class="header-right">
