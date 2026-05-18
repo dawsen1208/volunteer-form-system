@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 
-import { AppError } from "../utils/errors";
+import { isAppError } from "../utils/errors";
 
 export function errorHandler(
   err: unknown,
@@ -8,8 +8,12 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ): void {
-  if (err instanceof AppError) {
-    res.status(err.statusCode).json({ ok: false, message: err.message });
+  if (isAppError(err)) {
+    const message =
+      typeof (err as any).message === "string" && (err as any).message.trim()
+        ? (err as any).message.trim()
+        : "请求失败";
+    res.status(Number((err as any).statusCode) || 500).json({ ok: false, message });
     return;
   }
 

@@ -28,7 +28,7 @@ export function authMiddleware(
     }
     req.user = { role: payload.role, userId: payload.userId, phone: payload.phone };
     next();
-  } catch (err) {
-    next(err);
+  } catch {
+    next(new AppError(401, "Unauthorized"));
   }
 }

@@ -19,6 +19,10 @@ app.use(cors({ origin: corsOrigin }));
 app.options("*", cors({ origin: corsOrigin }));
 app.use(express.json());
 
+app.use("/", apiRoutes);
+app.use("/forms", formRoutes);
+app.use("/my", myRoutes);
+
 app.use("/api", apiRoutes);
 app.use("/api/forms", formRoutes);
 app.use("/api/my", myRoutes);
