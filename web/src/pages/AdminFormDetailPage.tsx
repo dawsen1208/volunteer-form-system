@@ -1,8 +1,8 @@
-import { Button, Descriptions, Popconfirm, Spin, message } from "antd";
+import { Button, Descriptions, Form, Input, Modal, Popconfirm, Spin, message } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { deleteAdminFormById, getAdminFormById } from "../api/admin";
+import { deleteAdminFormById, getAdminFormById, getUserPasswordForAdmin } from "../api/admin";
 import { AppCard } from "../components/AppCard";
 import { FormContentView } from "../components/FormContentView";
 import { FormSectionCard } from "../components/FormSectionCard";
@@ -24,6 +24,10 @@ export function AdminFormDetailPage() {
   const [api, contextHolder] = message.useMessage();
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<AdminFormRecord | null>(null);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [userPassword, setUserPassword] = useState<string | null>(null);
+  const [passwordForm] = Form.useForm<{ adminPassword: string }>();
 
   useEffect(() => {
     async function load() {
@@ -43,6 +47,7 @@ export function AdminFormDetailPage() {
   }, [api, id, navigate]);
 
   const content = form?.content as FormContent | undefined;
+  const userPhone = form?.userId?.phone ?? "";
 
   return (
     <MainLayout title="管理员后台">
@@ -95,6 +100,21 @@ export function AdminFormDetailPage() {
                 <Descriptions.Item label="用户手机号">
                   {form.userId?.phone ?? "-"}
                 </Descriptions.Item>
+                <Descriptions.Item label="用户密码">
+                  <div className="flex items-center gap-2">
+                    <span>{userPassword ? userPassword : "******"}</span>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setPasswordOpen(true);
+                        passwordForm.resetFields();
+                      }}
+                      disabled={!userPhone}
+                    >
+                      查看
+                    </Button>
+                  </div>
+                </Descriptions.Item>
                 <Descriptions.Item label="表单类型">{mapFormType(form.type)}</Descriptions.Item>
                 <Descriptions.Item label="状态">
                   <StatusTag kind="status" value={form.status} />
@@ -117,6 +137,45 @@ export function AdminFormDetailPage() {
           </div>
         )}
       </div>
+
+      <Modal
+        title="查看用户密码"
+        open={passwordOpen}
+        onCancel={() => {
+          if (passwordLoading) return;
+          setPasswordOpen(false);
+        }}
+        onOk={async () => {
+          if (!userPhone) return;
+          try {
+            const values = await passwordForm.validateFields();
+            setPasswordLoading(true);
+            const res = await getUserPasswordForAdmin(userPhone, String(values.adminPassword ?? ""));
+            setUserPassword(res.password);
+            api.success("已显示密码");
+            setPasswordOpen(false);
+          } catch (err: any) {
+            if (err?.errorFields) return;
+            api.error(err?.message || "获取失败");
+          } finally {
+            setPasswordLoading(false);
+          }
+        }}
+        okText="确认"
+        cancelText="取消"
+        confirmLoading={passwordLoading}
+        destroyOnClose
+      >
+        <Form layout="vertical" form={passwordForm} autoComplete="off">
+          <Form.Item
+            label="管理员密码"
+            name="adminPassword"
+            rules={[{ required: true, message: "请输入管理员密码" }]}
+          >
+            <Input.Password placeholder="请输入管理员密码" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </MainLayout>
   );
 }

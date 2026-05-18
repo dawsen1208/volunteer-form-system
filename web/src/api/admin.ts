@@ -16,3 +16,8 @@ export async function deleteAdminFormById(id: string) {
   const res = await apiClient.delete(`/admin/forms/${id}`);
   return unwrapOk<{ deleted: boolean }>(res.data).deleted;
 }
+
+export async function getUserPasswordForAdmin(phone: string, adminPassword: string) {
+  const res = await apiClient.post("/admin/user-password", { phone, adminPassword });
+  return unwrapOk<{ phone: string; password: string }>(res.data);
+}

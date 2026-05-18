@@ -7,6 +7,7 @@ import { AdminPage } from "../pages/AdminPage";
 import { FormTypePage } from "../pages/FormTypePage";
 import { FormPage } from "../pages/FormPage";
 import { LoginPage } from "../pages/LoginPage";
+import { LoginV2Page } from "../pages/LoginV2Page";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { ProfilePage } from "../pages/ProfilePage";
 import { RecordsPage } from "../pages/RecordsPage";
@@ -17,6 +18,7 @@ export function AppRouter() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/login2" element={<LoginV2Page />} />
         <Route path="/admin-login" element={<AdminLoginPage />} />
 
         <Route element={<ProtectedRoute />}>

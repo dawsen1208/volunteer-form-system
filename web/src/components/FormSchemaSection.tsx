@@ -309,6 +309,7 @@ function renderEditor(field: FieldDef) {
 }
 
 export function FormSchemaSection(props: Props) {
+  const form = Form.useFormInstance();
   const fields = props.section.fields;
 
   function renderField(field: FieldDef) {
@@ -358,7 +359,48 @@ export function FormSchemaSection(props: Props) {
             field.editor.type === "select" || field.editor.type === "radio" || field.editor.type === "checkboxGroup" || field.editor.type === "subjectSelection"
               ? "请选择"
               : "请输入";
-          const rules = isRequired ? [{ required: true, message: `${messagePrefix}${field.label}` }] : undefined;
+          const baseRules = isRequired ? [{ required: true, message: `${messagePrefix}${field.label}` }] : [];
+          const extraRules =
+            field.name.length === 2 &&
+            field.name[0] === "scores" &&
+            field.name[1] === "totalScore"
+              ? [
+                  {
+                    validator: async (_: any, value: any) => {
+                      const total = Number(value);
+                      if (!Number.isFinite(total)) return;
+                      const subjects = form.getFieldValue(["scores", "subjectsSelected"]);
+                      const selected: string[] = Array.isArray(subjects) ? subjects : [];
+                      const map: Record<string, string> = {
+                        语文: "chineseScore",
+                        数学: "mathScore",
+                        英语: "englishScore",
+                        物理: "physicsScore",
+                        化学: "chemistryScore",
+                        生物: "biologyScore",
+                        政治: "politicsScore",
+                        历史: "historyScore",
+                        地理: "geographyScore"
+                      };
+                      let sum = 0;
+                      for (const s of selected) {
+                        const key = map[s];
+                        if (!key) continue;
+                        const v = form.getFieldValue(["scores", key]);
+                        if (v === undefined || v === null || v === "") return;
+                        const n = Number(v);
+                        if (!Number.isFinite(n)) return;
+                        sum += n;
+                      }
+                      if (selected.length === 6 && sum !== total) {
+                        throw new Error(`总分必须等于6科成绩之和（当前合计 ${sum}）`);
+                      }
+                    }
+                  }
+                ]
+              : [];
+
+          const rules = (baseRules.length || extraRules.length ? [...baseRules, ...extraRules] : undefined) as any;
           const className = field.span === 2 ? "md:col-span-2" : undefined;
 
           const isDate = field.editor.type === "date";
@@ -370,6 +412,22 @@ export function FormSchemaSection(props: Props) {
               label={isCheckbox ? undefined : field.label}
               name={field.name as any}
               rules={(isDate ? dateRules : rules) as any}
+              dependencies={
+                field.name.length === 2 && field.name[0] === "scores" && field.name[1] === "totalScore"
+                  ? [
+                      ["scores", "subjectsSelected"],
+                      ["scores", "chineseScore"],
+                      ["scores", "mathScore"],
+                      ["scores", "englishScore"],
+                      ["scores", "physicsScore"],
+                      ["scores", "chemistryScore"],
+                      ["scores", "biologyScore"],
+                      ["scores", "politicsScore"],
+                      ["scores", "historyScore"],
+                      ["scores", "geographyScore"]
+                    ]
+                  : undefined
+              }
               valuePropName={isCheckbox ? "checked" : undefined}
               className={className}
               getValueProps={

@@ -72,7 +72,11 @@ export function FormTypePage() {
     <MainLayout title="选择志愿单类型">
       {contextHolder}
       <div className="space-y-6">
-        <PageHeader title="选择志愿单类型" subtitle="请选择本科或专科志愿单类型进入填写" />
+        <PageHeader
+          title="选择志愿单类型"
+          subtitle="请选择本科或专科志愿单类型进入填写"
+          extra={<Button onClick={() => navigate("/profile")}>返回</Button>}
+        />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <AppCard className="flex flex-col gap-3">
             <div className="text-base font-semibold text-slate-900">本科志愿单</div>

@@ -74,8 +74,9 @@ export function getFormSchema(type: FormType): SectionDef[] {
       title: "基本信息",
       step: 0,
       fields: [
+        { name: ["candidatePhone"], label: "考生电话", required: true, editor: { type: "input", placeholder: "请输入" } },
         { name: ["parentPhone"], label: "家长电话", editor: { type: "input", placeholder: "请输入" } },
-        { name: ["name"], label: "姓名", required: true, editor: { type: "input", placeholder: "请输入" } },
+        { name: ["name"], label: "考生姓名", required: true, editor: { type: "input", placeholder: "请输入" } },
         {
           name: ["gender"],
           label: "性别",
@@ -91,7 +92,6 @@ export function getFormSchema(type: FormType): SectionDef[] {
           required: true,
           editor: { type: "radio", options: [{ label: "应届", value: "应届" }, { label: "往届", value: "往届" }] }
         },
-        { name: ["candidatePhone"], label: "考生电话", required: true, editor: { type: "input", placeholder: "请输入" } },
         { name: ["homeAddress"], label: "家庭住址", span: 2, editor: { type: "homeAddress" } },
         { name: ["idNumber"], label: "身份证号", required: true, span: 2, editor: { type: "input", placeholder: "请输入" } },
         { name: ["examNumber"], label: "考生号", required: true, editor: { type: "input", placeholder: "请输入" } },
@@ -196,7 +196,7 @@ export function getFormSchema(type: FormType): SectionDef[] {
       step: 3,
       fields: [
         { name: ["scores", "totalScore"], label: "总分", required: true, editor: { type: "number", placeholder: "请输入" } },
-        { name: ["scores", "rank"], label: "位次", required: true, editor: { type: "number", placeholder: "请输入" } },
+        { name: ["scores", "rank"], label: "位次", editor: { type: "number", placeholder: "请输入" } },
         {
           name: ["scores", "subjectsSelected"],
           label: "选科情况",
@@ -278,6 +278,8 @@ export function getFormSchema(type: FormType): SectionDef[] {
       title: "家庭情况",
       step: 2,
       fields: [
+        { name: ["fatherName"], label: "父亲姓名", editor: { type: "input", placeholder: "请输入" } },
+        { name: ["motherName"], label: "母亲姓名", editor: { type: "input", placeholder: "请输入" } },
         { name: ["fatherOccupation"], label: "父亲职业", editor: { type: "input", placeholder: "请输入" } },
         { name: ["motherOccupation"], label: "母亲职业", editor: { type: "input", placeholder: "请输入" } },
         {

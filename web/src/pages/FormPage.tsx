@@ -169,7 +169,7 @@ export function FormPage() {
 
     if (targetStep === 0) {
       const name = String(form.getFieldValue("name") ?? "").trim();
-      if (!name) throw new Error("请输入姓名");
+      if (!name) throw new Error("请输入考生姓名");
 
       const graduateSchool = String(form.getFieldValue("graduateSchool") ?? "").trim();
       if (!graduateSchool) throw new Error("请输入毕业学校");

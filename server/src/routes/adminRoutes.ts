@@ -4,6 +4,7 @@ import {
   deleteFormByIdForAdminController,
   getAllFormsController,
   getFormByIdForAdminController,
+  getUserPasswordForAdminController,
   loginAdminController
 } from "../controllers/adminController";
 import { adminOnly } from "../middleware/adminOnly";
@@ -15,3 +16,4 @@ adminRoutes.post("/login", loginAdminController);
 adminRoutes.get("/forms", authMiddleware, adminOnly, getAllFormsController);
 adminRoutes.get("/forms/:id", authMiddleware, adminOnly, getFormByIdForAdminController);
 adminRoutes.delete("/forms/:id", authMiddleware, adminOnly, deleteFormByIdForAdminController);
+adminRoutes.post("/user-password", authMiddleware, adminOnly, getUserPasswordForAdminController);

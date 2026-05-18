@@ -178,24 +178,13 @@ function buildExportHtml(
   const publicUrl = (opts?.publicUrl ?? "").replace(/\/+$/, "");
   const qrSrcMap = opts?.qrSrcMap ?? {};
   const brandLogoSvg = `
-    <svg class="brand-logo" viewBox="0 0 200 200" aria-label="格学" role="img">
-      <defs>
-        <path id="gx-top" d="M 100,100 m -82,0 a 82,82 0 1,1 164,0 a 82,82 0 1,1 -164,0" />
-        <path id="gx-bottom" d="M 100,100 m 82,0 a 82,82 0 1,1 -164,0 a 82,82 0 1,1 164,0" />
-      </defs>
-      <circle cx="100" cy="100" r="94" fill="#FFFFFF" stroke="#7A0C0C" stroke-width="8" />
-      <circle cx="100" cy="100" r="82" fill="none" stroke="#7A0C0C" stroke-width="4" />
-      <circle cx="100" cy="110" r="64" fill="#7A0C0C" />
-      <text font-size="12" font-family="Arial" fill="#7A0C0C" letter-spacing="0.6">
-        <textPath href="#gx-top" startOffset="50%" text-anchor="middle">GeXue Research Institute of College Admission</textPath>
-      </text>
-      <text font-size="14" font-family="Microsoft YaHei, PingFang SC, Arial" fill="#7A0C0C" letter-spacing="2">
-        <textPath href="#gx-bottom" startOffset="50%" text-anchor="middle">格学教育</textPath>
-      </text>
-      <text x="100" y="108" text-anchor="middle" font-size="54" font-family="STKaiti, KaiTi, SimSun, Microsoft YaHei, PingFang SC, Arial" fill="#FFFFFF" font-weight="700">格学</text>
-      <path d="M58 132c16-10 32-14 42-14s26 4 42 14" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" />
-      <path d="M58 132c0 0 10 8 42 8s42-8 42-8" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" />
-      <text x="100" y="168" text-anchor="middle" font-size="16" font-family="Arial" fill="#FFFFFF" font-weight="700">2011</text>
+    <svg class="brand-logo" viewBox="0 0 64 64" aria-label="志愿填报系统" role="img">
+      <rect x="8" y="6" width="40" height="52" rx="8" fill="#1677ff" />
+      <rect x="14" y="14" width="28" height="4" rx="2" fill="#ffffff" opacity="0.9" />
+      <rect x="14" y="24" width="22" height="4" rx="2" fill="#ffffff" opacity="0.9" />
+      <rect x="14" y="34" width="26" height="4" rx="2" fill="#ffffff" opacity="0.9" />
+      <path d="M44 14l12 12-18 18H26V32l18-18z" fill="#ff4d4f" />
+      <path d="M41 17l6 6" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
     </svg>
   `.trim();
   const css = `
@@ -211,8 +200,7 @@ function buildExportHtml(
     .brand-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .brand-logo { width: 34px; height: 34px; flex: 0 0 auto; }
     .brand-text { min-width: 0; }
-    .brand-name { font-size: 12px; font-weight: 800; line-height: 1.2; color: #b91c1c; }
-    .brand-pinyin { font-size: 10px; font-weight: 700; line-height: 1.2; color: #b91c1c; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+    .brand-name { font-size: 12px; font-weight: 800; line-height: 1.2; color: #111; }
     .brand-contact { font-size: 10px; color: #111; line-height: 1.2; white-space: nowrap; padding-top: 1px; }
     .header-right { width: 88px; text-align: right; flex: 0 0 auto; }
     .qr-img { width: 72px; height: 72px; display: inline-block; }
@@ -229,11 +217,15 @@ function buildExportHtml(
     .muted { color: #666; }
     .line { border-bottom: 1px solid #999; min-height: 18px; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .major-table.fixed10 { height: 240mm; }
+    .major-table.fixed10 thead tr { height: 10mm; }
+    .major-table.fixed10 tbody tr { height: calc((240mm - 10mm) / 10); }
+    .major-table.fixed10 td { vertical-align: middle; }
   `;
 
   function pageHtml(form: AdminFormRecord) {
     const content = form.content as FormContent;
-    const name = formatTextValue("姓名", (content as any)?.name);
+    const name = formatTextValue("考生姓名", (content as any)?.name);
     const phone = form.userId?.phone ?? "-";
     const typeText = mapFormType(form.type);
     const statusText = form.status === "submitted" ? "已提交" : "草稿";
@@ -284,15 +276,21 @@ function buildExportHtml(
           </colgroup>
     `;
 
-    const majorRows = majors.length
-      ? majors
-          .map((m, idx) => {
-            const cat = escapeHtml(String(m?.majorCategory ?? ""));
-            const mn = escapeHtml(String(m?.majorName ?? ""));
-            return `<tr><td style="width: 8%;">${idx + 1}</td><td style="width: 32%;">${cat || "-"}</td><td>${mn || "-"}</td></tr>`;
-          })
-          .join("")
-      : `<tr><td style="width: 8%;">1</td><td style="width: 32%;">-</td><td>-</td></tr>`;
+    const majorList: any[] = Array.isArray(majors) ? majors : [];
+    const paddedMajors =
+      majorList.length <= 10
+        ? [...majorList, ...Array.from({ length: Math.max(0, 10 - majorList.length) }, () => ({}))]
+        : majorList;
+    const majorTableClass = majorList.length <= 10 ? "major-table fixed10" : "major-table";
+    const majorRows = paddedMajors
+      .map((m, idx) => {
+        const cat = escapeHtml(String(m?.majorCategory ?? ""));
+        const mn = escapeHtml(String(m?.majorName ?? ""));
+        const catText = cat || "";
+        const mnText = mn || "";
+        return `<tr><td style="width: 8%;">${idx + 1}</td><td style="width: 32%;">${catText}</td><td>${mnText}</td></tr>`;
+      })
+      .join("");
 
     return `
       <div class="page">
@@ -303,11 +301,10 @@ function buildExportHtml(
                 <div class="brand-left">
                   ${brandLogoSvg}
                   <div class="brand-text">
-                    <div class="brand-name">北京格学教育</div>
-                    <div class="brand-pinyin">BEIJING GEXUE EDUCATION</div>
+                    <div class="brand-name">志愿填报系统</div>
                   </div>
                 </div>
-                <div class="brand-contact">丁老师 13396216040 · 李老师 15163091937</div>
+                <div class="brand-contact">宗老师 13779887445</div>
               </div>
               <h1>高考志愿填报约谈表</h1>
               <div class="meta">
@@ -329,7 +326,7 @@ function buildExportHtml(
         <table class="kv">
           ${kvColgroup}
           <tr>
-            <td class="label">姓名</td><td class="value">${escapeHtml(name)}</td>
+            <td class="label">考生姓名</td><td class="value">${escapeHtml(name)}</td>
             <td class="label">性别</td><td class="value">${escapeHtml(formatTextValue("性别", (content as any)?.gender))}</td>
             <td class="label">民族</td><td class="value">${escapeHtml(formatTextValue("民族", (content as any)?.ethnicity))}</td>
           </tr>
@@ -391,9 +388,13 @@ function buildExportHtml(
         <table class="kv">
           ${kvColgroup}
           <tr>
+            <td class="label">父亲姓名</td><td class="value">${escapeHtml(formatTextValue("父亲姓名", (content as any)?.fatherName))}</td>
+            <td class="label">母亲姓名</td><td class="value">${escapeHtml(formatTextValue("母亲姓名", (content as any)?.motherName))}</td>
             <td class="label">父亲职业</td><td class="value">${escapeHtml(formatTextValue("父亲职业", (content as any)?.fatherOccupation))}</td>
+          </tr>
+          <tr>
             <td class="label">母亲职业</td><td class="value">${escapeHtml(formatTextValue("母亲职业", (content as any)?.motherOccupation))}</td>
-            <td class="label">社会资源</td><td class="value" colspan="1">${escapeHtml(formatTextValue("社会资源", (content as any)?.socialResources))}</td>
+            <td class="label">社会资源</td><td class="value" colspan="3">${escapeHtml(formatTextValue("社会资源", (content as any)?.socialResources))}</td>
           </tr>
         </table>
 
@@ -411,14 +412,29 @@ function buildExportHtml(
           </tr>
         </table>
 
-        <div class="section-title">专业意向表格</div>
-        <table>
-          <tr>
-            <th style="width: 8%;">序</th>
-            <th style="width: 32%;">专业大类</th>
-            <th>具体专业</th>
-          </tr>
-          ${majorRows}
+      </div>
+      <div class="page major-page">
+        <div class="header">
+          <h1>专业意向表格</h1>
+          <div class="meta">
+            <div class="item">姓名：${escapeHtml(name)}</div>
+            <div class="item">手机号：${escapeHtml(String(phone))}</div>
+            <div class="item">类型：${escapeHtml(typeText)}</div>
+            <div class="item">状态：${escapeHtml(statusText)}</div>
+            <div class="item">填写时间：${escapeHtml(filledAtText)}</div>
+          </div>
+        </div>
+        <table class="${majorTableClass}">
+          <thead>
+            <tr>
+              <th style="width: 8%;">序</th>
+              <th style="width: 32%;">专业大类</th>
+              <th>具体专业</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${majorRows}
+          </tbody>
         </table>
       </div>
     `;
@@ -559,9 +575,9 @@ export function AdminPage() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
     const publicUrl = getPublicSiteUrl();
-    const qrSrcMap: Record<string, string> = {};
-    const assets: QrAsset[] = [];
     for (const f of list) {
+      const qrSrcMap: Record<string, string> = {};
+      const assets: QrAsset[] = [];
       const url = `${publicUrl}/#/form/${f.type}?id=${f._id}`;
       const name = `qr_${f._id}.png`;
       const cid = `qr_${f._id}@export`;
@@ -570,39 +586,37 @@ export function AdminPage() {
         qrSrcMap[f._id] = `cid:${cid}`;
         assets.push({ name, cid, base64 });
       }
+      const typeText = mapFormType(f.type);
+      const nameText = String(((f.content as any)?.name ?? "") || "未命名");
+      const date = f.updatedAt
+        ? new Date(f.updatedAt).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+      const filename = `${typeText}-${nameText}-导出-${date}.mht`;
+      const html = buildExportHtml([f], filename.replace(/\.mht$/, ""), { publicUrl, qrSrcMap });
+      downloadWordMhtml(html, assets, filename);
     }
-    const one = list.length === 1 ? list[0] : null;
-    const typeText = one ? mapFormType(one.type) : "志愿表单";
-    const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
-    const date = one?.updatedAt
-      ? new Date(one.updatedAt).toISOString().slice(0, 10)
-      : new Date().toISOString().slice(0, 10);
-    const filename = `${typeText}-${nameText}-导出-${date}.mht`;
-    const html = buildExportHtml(list, filename.replace(/\.mht$/, ""), { publicUrl, qrSrcMap });
-    downloadWordMhtml(html, assets, filename);
   }
 
   async function exportPdf() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
     const publicUrl = getPublicSiteUrl();
-    const qrSrcMap: Record<string, string> = {};
-    for (const f of list) {
+    list.forEach((f, idx) => {
+      const qrSrcMap: Record<string, string> = {};
       const url = `${publicUrl}/#/form/${f.type}?id=${f._id}`;
       const base64 = generateQrPngBase64(url, 96);
       if (base64) {
         qrSrcMap[f._id] = `data:image/png;base64,${base64}`;
       }
-    }
-    const one = list.length === 1 ? list[0] : null;
-    const typeText = one ? mapFormType(one.type) : "志愿表单";
-    const nameText = one ? String(((one.content as any)?.name ?? "") || "未命名") : "批量";
-    const date = one?.updatedAt
-      ? new Date(one.updatedAt).toISOString().slice(0, 10)
-      : new Date().toISOString().slice(0, 10);
-    const title = `${typeText}-${nameText}-导出-${date}`;
-    const html = buildExportHtml(list, title, { publicUrl, qrSrcMap });
-    printToPdf(html);
+      const typeText = mapFormType(f.type);
+      const nameText = String(((f.content as any)?.name ?? "") || "未命名");
+      const date = f.updatedAt
+        ? new Date(f.updatedAt).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+      const title = `${typeText}-${nameText}-导出-${date}`;
+      const html = buildExportHtml([f], title, { publicUrl, qrSrcMap });
+      window.setTimeout(() => printToPdf(html), idx * 800);
+    });
   }
 
   const columns = useMemo<ColumnsType<AdminFormRecord>>(
