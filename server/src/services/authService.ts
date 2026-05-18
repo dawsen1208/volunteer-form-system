@@ -192,33 +192,10 @@ export async function resetPasswordAndClearFormsByPhone(params: {
       : { userId: existing._id, userVersion: prevVersion };
 
   const clearedCount = await FormModel.countDocuments(visibleQuery).exec();
-
-  let updated = false;
-  try {
-    const session = await mongoose.startSession();
-    try {
-      await session.withTransaction(async () => {
-        await UserModel.updateOne(
-          { _id: existing._id },
-          { $set: { passwordHash }, $inc: { resetVersion: 1 } },
-          { session }
-        ).exec();
-      });
-      updated = true;
-    } finally {
-      await session.endSession();
-    }
-  } catch (err: any) {
-    const msg = String(err?.message ?? "");
-    if (!/transaction/i.test(msg)) throw err;
-  }
-
-  if (!updated) {
-    await UserModel.updateOne(
-      { _id: existing._id },
-      { $set: { passwordHash }, $inc: { resetVersion: 1 } }
-    ).exec();
-  }
+  await UserModel.updateOne(
+    { _id: existing._id },
+    { $set: { passwordHash }, $inc: { resetVersion: 1 } }
+  ).exec();
 
   return { clearedCount, isNew: false };
 }
