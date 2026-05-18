@@ -149,8 +149,8 @@ export function LoginPage() {
 
     try {
       const data = await loginUser(phone, password);
-      setAuth({ token: data.token, role: "user" });
-      navigate("/profile", { replace: true });
+      setAuth({ token: data.token, role: data.role });
+      navigate(data.role === "admin" ? "/admin" : "/profile", { replace: true });
     } catch (err: any) {
       api.error(err?.message || "登录失败");
     }
@@ -176,13 +176,8 @@ export function LoginPage() {
             <Button type="primary" htmlType="submit" block>
               登录 / 注册
             </Button>
-            <div className="mt-4 flex flex-col gap-1 text-sm text-slate-600">
-              <div>
-                管理员请前往 <Link to="/admin-login">管理员登录</Link>
-              </div>
-              <div>
-                志愿填报系统请访问 <Link to="/login2">/login2</Link>
-              </div>
+            <div className="mt-4 text-sm text-slate-600">
+              管理员请前往 <Link to="/admin-login">管理员登录</Link>
             </div>
             <div className="mt-2 text-center text-xs text-slate-500">首次进入系统加载时间较长，请耐心等待</div>
           </Form>

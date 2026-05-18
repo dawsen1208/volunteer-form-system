@@ -84,7 +84,7 @@ export async function loginUser(params: {
 export async function loginAdmin(params: {
   password: string;
 }): Promise<{ token: string; role: "admin" }> {
-  const password = params.password;
+  const password = params.password.trim();
   if (!password) {
     throw new AppError(400, "Invalid input");
   }
@@ -100,7 +100,7 @@ export async function getUserPasswordForAdmin(params: {
   adminPassword: string;
 }): Promise<{ password: string }> {
   const phone = params.phone.trim();
-  const adminPassword = params.adminPassword;
+  const adminPassword = params.adminPassword.trim();
   if (!/^1\\d{10}$/.test(phone)) {
     throw new AppError(400, "手机号格式不正确");
   }

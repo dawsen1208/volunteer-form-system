@@ -143,8 +143,8 @@ export function LoginV2Page() {
 
     try {
       const data = await loginUser(phone, password);
-      setAuth({ token: data.token, role: "user" });
-      navigate("/profile", { replace: true });
+      setAuth({ token: data.token, role: data.role });
+      navigate(data.role === "admin" ? "/admin" : "/profile", { replace: true });
     } catch (err: any) {
       api.error(err?.message || "登录失败");
     }
