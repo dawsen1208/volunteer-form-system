@@ -3,9 +3,6 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { QrCode } from "@rc-component/qrcode/es/libs/qrcodegen";
-import { ERROR_LEVEL_MAP } from "@rc-component/qrcode/es/utils";
-
 import { deleteAdminFormById, getAdminFormById, getAdminForms } from "../api/admin";
 import { AppCard } from "../components/AppCard";
 import { PageHeader } from "../components/PageHeader";
@@ -53,39 +50,6 @@ function toBase64Utf8(text: string): string {
   return btoa(binary);
 }
 
-function generateQrPngBase64(value: string, targetSizePx: number): string {
-  const qr = QrCode.encodeText(value, ERROR_LEVEL_MAP.M);
-  const modules = qr.getModules();
-  const margin = 4;
-  const count = modules.length + margin * 2;
-  const scale = Math.max(1, Math.floor(targetSizePx / count));
-  const size = count * scale;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return "";
-
-  ctx.fillStyle = "#FFFFFF";
-  ctx.fillRect(0, 0, size, size);
-
-  ctx.fillStyle = "#000000";
-  for (let y = 0; y < modules.length; y++) {
-    const row = modules[y];
-    for (let x = 0; x < row.length; x++) {
-      if (!row[x]) continue;
-      ctx.fillRect((x + margin) * scale, (y + margin) * scale, scale, scale);
-    }
-  }
-
-  const dataUrl = canvas.toDataURL("image/png");
-  const base64 = dataUrl.split(",")[1] ?? "";
-  return base64;
-}
-
-type QrAsset = { name: string; cid: string; base64: string };
-
 function wrapBase64(b64: string): string {
   const s = String(b64 ?? "");
   if (!s) return "";
@@ -96,7 +60,7 @@ function wrapBase64(b64: string): string {
   return lines.join("\r\n");
 }
 
-function buildMhtmlDoc(html: string, assets: QrAsset[]): string {
+function buildMhtmlDoc(html: string): string {
   const boundary = `----=_NextPart_${Math.random().toString(16).slice(2)}_${Date.now()}`;
   const startCid = "main@export";
   const header =
@@ -112,22 +76,8 @@ function buildMhtmlDoc(html: string, assets: QrAsset[]): string {
     `Content-Location: file:///C:/export.html\r\n\r\n` +
     `${htmlBase64}\r\n\r\n`;
 
-  const assetParts = assets
-    .map((a) => {
-      const base64 = wrapBase64(a.base64);
-      const content =
-        `--${boundary}\r\n` +
-        `Content-Type: image/png\r\n` +
-        `Content-Transfer-Encoding: base64\r\n` +
-        `Content-ID: <${a.cid}>\r\n` +
-        `Content-Location: ${a.name}\r\n\r\n` +
-        `${base64}\r\n\r\n`;
-      return content;
-    })
-    .join("");
-
   const footer = `--${boundary}--\r\n`;
-  return header + htmlPart + assetParts + footer;
+  return header + htmlPart + footer;
 }
 
 function formatTextValue(label: string, value: any) {
@@ -175,36 +125,15 @@ function buildExportHtml(
   docTitle?: string,
   opts?: { publicUrl?: string; qrSrcMap?: Record<string, string> }
 ) {
-  const publicUrl = (opts?.publicUrl ?? "").replace(/\/+$/, "");
-  const qrSrcMap = opts?.qrSrcMap ?? {};
-  const brandLogoSvg = `
-    <svg class="brand-logo" viewBox="0 0 64 64" aria-label="志愿填报系统" role="img">
-      <rect x="8" y="6" width="40" height="52" rx="8" fill="#1677ff" />
-      <rect x="14" y="14" width="28" height="4" rx="2" fill="#ffffff" opacity="0.9" />
-      <rect x="14" y="24" width="22" height="4" rx="2" fill="#ffffff" opacity="0.9" />
-      <rect x="14" y="34" width="26" height="4" rx="2" fill="#ffffff" opacity="0.9" />
-      <path d="M44 14l12 12-18 18H26V32l18-18z" fill="#ff4d4f" />
-      <path d="M41 17l6 6" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
-    </svg>
-  `.trim();
+  void docTitle;
+  void opts;
   const css = `
     @page { size: A4; margin: 10mm; }
     body { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; color: #111; }
     .page { page-break-after: always; }
     .page:last-child { page-break-after: auto; }
     h1 { font-size: 18px; margin: 0; text-align: center; letter-spacing: 1px; line-height: 1.2; }
-    .header { position: relative; margin: 0 0 6px; }
-    .header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-    .header-left { flex: 1; min-width: 0; }
-    .brand { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin: 0 0 6px; }
-    .brand-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .brand-logo { width: 34px; height: 34px; flex: 0 0 auto; }
-    .brand-text { min-width: 0; }
-    .brand-name { font-size: 12px; font-weight: 800; line-height: 1.2; color: #111; }
-    .brand-contact { font-size: 10px; color: #111; line-height: 1.2; white-space: nowrap; padding-top: 1px; }
-    .header-right { width: 88px; text-align: right; flex: 0 0 auto; }
-    .qr-img { width: 72px; height: 72px; display: inline-block; }
-    .qr-label { font-size: 10px; color: #333; margin: 0 0 4px; }
+    .header { margin: 0 0 6px; }
     .meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; margin: 4px 0 0; }
     .meta .item { white-space: nowrap; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -230,8 +159,6 @@ function buildExportHtml(
     const typeText = mapFormType(form.type);
     const statusText = form.status === "submitted" ? "已提交" : "草稿";
     const filledAtText = form.updatedAt ? formatTime(form.updatedAt) : "-";
-    const qrUrl = publicUrl ? `${publicUrl}/#/form/${form.type}?id=${form._id}` : "";
-    const qrSrc = qrUrl ? (qrSrcMap[form._id] ?? "") : "";
 
     const selectedSubjects: string[] = Array.isArray((content as any)?.scores?.subjectsSelected)
       ? ((content as any).scores.subjectsSelected as string[])
@@ -295,31 +222,7 @@ function buildExportHtml(
     return `
       <div class="page">
         <div class="header">
-          <div class="header-top">
-            <div class="header-left">
-              <div class="brand">
-                <div class="brand-left">
-                  ${brandLogoSvg}
-                  <div class="brand-text">
-                    <div class="brand-name">志愿填报系统</div>
-                  </div>
-                </div>
-                <div class="brand-contact">宗老师 13779887445</div>
-              </div>
-              <h1>高考志愿填报约谈表</h1>
-              <div class="meta">
-                <div class="item">姓名：${escapeHtml(name)}</div>
-                <div class="item">手机号：${escapeHtml(String(phone))}</div>
-                <div class="item">类型：${escapeHtml(typeText)}</div>
-                <div class="item">状态：${escapeHtml(statusText)}</div>
-                <div class="item">填写时间：${escapeHtml(filledAtText)}</div>
-              </div>
-            </div>
-            <div class="header-right">
-              <div class="qr-label">扫码打开线上表单</div>
-              ${qrSrc ? `<img class="qr-img" src="${qrSrc}" />` : ""}
-            </div>
-          </div>
+          <h1>高考志愿填报约谈表</h1>
         </div>
 
         <div class="section-title">基础信息</div>
@@ -416,13 +319,6 @@ function buildExportHtml(
       <div class="page major-page">
         <div class="header">
           <h1>专业意向表格</h1>
-          <div class="meta">
-            <div class="item">姓名：${escapeHtml(name)}</div>
-            <div class="item">手机号：${escapeHtml(String(phone))}</div>
-            <div class="item">类型：${escapeHtml(typeText)}</div>
-            <div class="item">状态：${escapeHtml(statusText)}</div>
-            <div class="item">填写时间：${escapeHtml(filledAtText)}</div>
-          </div>
         </div>
         <table class="${majorTableClass}">
           <thead>
@@ -441,8 +337,7 @@ function buildExportHtml(
   }
 
   const body = forms.map(pageHtml).join("");
-  const title = docTitle ?? "表单导出";
-  return `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(title)}</title><style>${css}</style></head><body>${body}</body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8" /><title></title><style>${css}</style></head><body>${body}</body></html>`;
 }
 
 function downloadWord(html: string, filename: string) {
@@ -457,8 +352,8 @@ function downloadWord(html: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function downloadWordMhtml(html: string, assets: QrAsset[], filename: string) {
-  const mhtml = buildMhtmlDoc(html, assets);
+function downloadWordMhtml(html: string, filename: string) {
+  const mhtml = buildMhtmlDoc(html);
   const blob = new Blob([mhtml], { type: "message/rfc822" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -574,47 +469,29 @@ export function AdminPage() {
   async function exportWord() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
-    const publicUrl = getPublicSiteUrl();
     for (const f of list) {
-      const qrSrcMap: Record<string, string> = {};
-      const assets: QrAsset[] = [];
-      const url = `${publicUrl}/#/form/${f.type}?id=${f._id}`;
-      const name = `qr_${f._id}.png`;
-      const cid = `qr_${f._id}@export`;
-      const base64 = generateQrPngBase64(url, 96);
-      if (base64) {
-        qrSrcMap[f._id] = `cid:${cid}`;
-        assets.push({ name, cid, base64 });
-      }
       const typeText = mapFormType(f.type);
       const nameText = String(((f.content as any)?.name ?? "") || "未命名");
       const date = f.updatedAt
         ? new Date(f.updatedAt).toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10);
       const filename = `${typeText}-${nameText}-导出-${date}.mht`;
-      const html = buildExportHtml([f], filename.replace(/\.mht$/, ""), { publicUrl, qrSrcMap });
-      downloadWordMhtml(html, assets, filename);
+      const html = buildExportHtml([f], "");
+      downloadWordMhtml(html, filename);
     }
   }
 
   async function exportPdf() {
     const list = await getSelectedFormsForExport();
     if (!list.length) return;
-    const publicUrl = getPublicSiteUrl();
     list.forEach((f, idx) => {
-      const qrSrcMap: Record<string, string> = {};
-      const url = `${publicUrl}/#/form/${f.type}?id=${f._id}`;
-      const base64 = generateQrPngBase64(url, 96);
-      if (base64) {
-        qrSrcMap[f._id] = `data:image/png;base64,${base64}`;
-      }
       const typeText = mapFormType(f.type);
       const nameText = String(((f.content as any)?.name ?? "") || "未命名");
       const date = f.updatedAt
         ? new Date(f.updatedAt).toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10);
       const title = `${typeText}-${nameText}-导出-${date}`;
-      const html = buildExportHtml([f], title, { publicUrl, qrSrcMap });
+      const html = buildExportHtml([f], "");
       window.setTimeout(() => printToPdf(html), idx * 800);
     });
   }
