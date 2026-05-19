@@ -319,6 +319,13 @@ function buildExportHtml(
       <div class="page major-page">
         <div class="header">
           <h1>专业意向表格</h1>
+          <div class="meta">
+            <div class="item">姓名：${escapeHtml(name)}</div>
+            <div class="item">手机号：${escapeHtml(phone)}</div>
+            <div class="item">类型：${escapeHtml(typeText)}</div>
+            <div class="item">状态：${escapeHtml(statusText)}</div>
+            <div class="item">填写时间：${escapeHtml(filledAtText)}</div>
+          </div>
         </div>
         <table class="${majorTableClass}">
           <thead>
