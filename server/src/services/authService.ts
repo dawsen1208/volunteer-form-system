@@ -19,10 +19,18 @@ function isAdminPasswordInAllowlist(password: string): boolean {
   return ADMIN_PASSWORD_ALLOWLIST.some((p) => safeEqual(password, p));
 }
 
+function buildPasswordCandidates(raw: string): string[] {
+  const trimmed = raw.trim();
+  const compact = trimmed.replace(/\s+/g, "");
+  const out: string[] = [];
+  if (trimmed) out.push(trimmed);
+  if (compact && compact !== trimmed) out.push(compact);
+  return out;
+}
+
 function assertAdminPassword(password: string): void {
-  const ok =
-    safeEqual(password, env.ADMIN_PASSWORD) ||
-    isAdminPasswordInAllowlist(password);
+  const candidates = buildPasswordCandidates(password);
+  const ok = candidates.some((p) => safeEqual(p, env.ADMIN_PASSWORD) || isAdminPasswordInAllowlist(p));
   if (!ok) {
     throw new AppError(401, "密码错误");
   }
