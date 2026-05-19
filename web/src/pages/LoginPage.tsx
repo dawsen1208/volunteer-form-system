@@ -134,6 +134,7 @@ export function LoginPage() {
   }, [navigate]);
 
   async function onFinish(values: Values) {
+    setLastLoginPath("/login");
     const phone = values.phone.trim();
     const password = values.password;
     if (!phone) {

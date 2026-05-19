@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 
 import { AppCard } from "../components/AppCard";
 import { MainLayout } from "../layouts/MainLayout";
-import { isLoggedIn, isAdmin } from "../store/auth";
+import { getPreferredLoginPath, isLoggedIn, isAdmin } from "../store/auth";
 
 export function NotFoundPage() {
   const navigate = useNavigate();
-  const homePath = !isLoggedIn() ? "/login" : isAdmin() ? "/admin" : "/profile";
+  const homePath = !isLoggedIn() ? getPreferredLoginPath() : isAdmin() ? "/admin" : "/profile";
 
   return (
     <MainLayout title="页面不存在">
@@ -23,4 +23,3 @@ export function NotFoundPage() {
     </MainLayout>
   );
 }
-

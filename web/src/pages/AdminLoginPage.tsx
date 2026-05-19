@@ -22,6 +22,7 @@ export function AdminLoginPage() {
   }, [navigate]);
 
   async function onFinish(values: Values) {
+    setLastLoginPath("/admin-login");
     const password = values.password;
     if (!password) {
       api.error("密码不能为空");
