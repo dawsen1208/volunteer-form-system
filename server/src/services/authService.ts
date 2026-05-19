@@ -101,7 +101,7 @@ export async function getUserPasswordForAdmin(params: {
 }): Promise<{ password: string }> {
   const phone = params.phone.trim();
   const adminPassword = params.adminPassword.trim();
-  if (!/^1\\d{10}$/.test(phone)) {
+  if (!/^1\d{10}$/.test(phone)) {
     throw new AppError(400, "手机号格式不正确");
   }
   if (!adminPassword) {

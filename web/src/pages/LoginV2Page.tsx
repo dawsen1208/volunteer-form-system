@@ -126,7 +126,7 @@ export function LoginV2Page() {
   }, [navigate]);
 
   async function onFinish(values: Values) {
-    const phone = values.phone.trim();
+    const phone = values.phone.replace(/\s+/g, "").trim();
     const password = values.password;
     if (!phone) {
       api.error("手机号不能为空");
@@ -136,7 +136,7 @@ export function LoginV2Page() {
       api.error("密码不能为空");
       return;
     }
-    if (!/^1\\d{10}$/.test(phone)) {
+    if (!/^1\d{10}$/.test(phone)) {
       api.error("手机号格式不正确");
       return;
     }
