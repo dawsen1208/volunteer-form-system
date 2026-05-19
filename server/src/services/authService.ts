@@ -13,12 +13,16 @@ function safeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-const ADMIN_PASSWORD_ALLOWLIST = ["13396216040", "13779887445"];
+const ADMIN_PASSWORD_ALLOWLIST = ["13396216040", "13779887445"] as const;
+
+function isAdminPasswordInAllowlist(password: string): boolean {
+  return ADMIN_PASSWORD_ALLOWLIST.some((p) => safeEqual(password, p));
+}
 
 function assertAdminPassword(password: string): void {
   const ok =
     safeEqual(password, env.ADMIN_PASSWORD) ||
-    ADMIN_PASSWORD_ALLOWLIST.some((p) => safeEqual(password, p));
+    isAdminPasswordInAllowlist(password);
   if (!ok) {
     throw new AppError(401, "密码错误");
   }
