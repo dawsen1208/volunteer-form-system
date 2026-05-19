@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { StatusTag } from "../components/StatusTag";
-import { clearAuth, getAuth } from "../store/auth";
+import { clearAuth, getAuth, getPreferredLoginPath } from "../store/auth";
 
 type Props = {
   children: ReactNode;
@@ -28,7 +28,7 @@ export function MainLayout(props: Props) {
             <Button
               onClick={() => {
                 clearAuth();
-                navigate("/login", { replace: true });
+                navigate(getPreferredLoginPath(), { replace: true });
               }}
             >
               退出登录

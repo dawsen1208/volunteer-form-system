@@ -4,7 +4,8 @@ const KEYS = {
   token: "vfs.auth.token",
   role: "vfs.auth.role",
   userId: "vfs.auth.userId",
-  phone: "vfs.auth.phone"
+  phone: "vfs.auth.phone",
+  lastLoginPath: "vfs.ui.lastLoginPath"
 } as const;
 
 export function getToken(): string | null {
@@ -46,3 +47,16 @@ export function clearAuth(): void {
   localStorage.removeItem(KEYS.phone);
 }
 
+export function getLastLoginPath(): string | null {
+  const v = localStorage.getItem(KEYS.lastLoginPath);
+  if (v === "/login" || v === "/login2" || v === "/admin-login") return v;
+  return null;
+}
+
+export function setLastLoginPath(path: string): void {
+  if (path === "/login" || path === "/login2" || path === "/admin-login") {
+    localStorage.setItem(KEYS.lastLoginPath, path);
+    return;
+  }
+  localStorage.removeItem(KEYS.lastLoginPath);
+}

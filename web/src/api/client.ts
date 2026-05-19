@@ -1,7 +1,7 @@
 import axios, { AxiosError } from "axios";
 
 import type { ApiResponse } from "../types";
-import { clearAuth } from "../store/auth";
+import { clearAuth, getPreferredLoginPath } from "../store/auth";
 import { getToken } from "../utils/storage";
 
 declare global {
@@ -56,7 +56,7 @@ apiClient.interceptors.response.use(
     if (status === 401) {
       clearAuth();
       if (typeof window !== "undefined") {
-        window.location.hash = "#/login";
+        window.location.hash = `#${getPreferredLoginPath()}`;
       }
       return Promise.reject(new Error("登录已过期，请重新登录"));
     }

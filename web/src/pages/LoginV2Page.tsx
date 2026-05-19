@@ -8,6 +8,7 @@ import { ERROR_LEVEL_MAP } from "@rc-component/qrcode/es/utils";
 import { loginUser } from "../api/auth";
 import { AuthLayout } from "../layouts/AuthLayout";
 import { getAuth, setAuth } from "../store/auth";
+import { setLastLoginPath } from "../utils/storage";
 
 type Values = {
   phone: string;
@@ -119,6 +120,7 @@ export function LoginV2Page() {
   }, [rawPublicUrl]);
 
   useEffect(() => {
+    setLastLoginPath("/login2");
     const auth = getAuth();
     if (!auth) return;
     if (auth.role === "admin") navigate("/admin", { replace: true });

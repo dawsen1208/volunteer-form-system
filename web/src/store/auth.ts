@@ -1,5 +1,13 @@
 import type { AuthRole } from "../types";
-import { clearAuth as clearAuthStorage, getPhone, getRole, getToken, getUserId, setAuth as setAuthStorage } from "../utils/storage";
+import {
+  clearAuth as clearAuthStorage,
+  getLastLoginPath,
+  getPhone,
+  getRole,
+  getToken,
+  getUserId,
+  setAuth as setAuthStorage
+} from "../utils/storage";
 
 function decodeJwtPayload(token: string): any {
   const parts = token.split(".");
@@ -48,6 +56,10 @@ export function setAuth(params: { token: string; role: AuthRole }): void {
 
 export function clearAuth(): void {
   clearAuthStorage();
+}
+
+export function getPreferredLoginPath(): "/login" | "/login2" | "/admin-login" {
+  return getLastLoginPath() ?? "/login";
 }
 
 export function isLoggedIn(): boolean {

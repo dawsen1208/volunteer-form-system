@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { loginAdmin } from "../api/auth";
 import { AuthLayout } from "../layouts/AuthLayout";
 import { getAuth, setAuth } from "../store/auth";
+import { setLastLoginPath } from "../utils/storage";
 
 type Values = {
   password: string;
@@ -15,6 +16,7 @@ export function AdminLoginPage() {
   const [api, contextHolder] = message.useMessage();
 
   useEffect(() => {
+    setLastLoginPath("/admin-login");
     const auth = getAuth();
     if (auth?.role === "admin") navigate("/admin", { replace: true });
   }, [navigate]);
@@ -52,4 +54,3 @@ export function AdminLoginPage() {
     </AuthLayout>
   );
 }
-
